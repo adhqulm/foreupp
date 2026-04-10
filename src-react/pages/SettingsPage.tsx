@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { useSpace } from '../context/SpaceContext'
@@ -58,7 +58,7 @@ function resizeImageToBase64(file: File, maxSize = 160): Promise<string> {
         canvas.width = Math.round(img.width * scale)
         canvas.height = Math.round(img.height * scale)
         canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', 0.88))
+        resolve(canvas.toDataURL('image/jpeg', 0.97))
       }
       img.onerror = reject
       img.src = e.target?.result as string
@@ -72,11 +72,21 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
   const { user, userProfile, updateProfile, updatePassword, updatePhotoURL } = useAuth()
   const { partner, joinSpace, leaveSpace } = useSpace()
-  const { highlightWeekends, setHighlightWeekends, language, setLanguage, timezone, setTimezone, calendarName, setCalendarName, weekendColor, setWeekendColor, use24Hour, setUse24Hour } = useAppSettings()
+  const { highlightWeekends, setHighlightWeekends, language, setLanguage, timezone, setTimezone, calendarName, setCalendarName, weekendColor, setWeekendColor, use24Hour, setUse24Hour, hideTitleBar, setHideTitleBar } = useAppSettings()
   const t = { ...((UI as any)[language] ?? (UI as any)['en']) }
 
   const [displayName, setDisplayName] = useState(userProfile?.displayName ?? '')
   const [profileColor, setProfileColor] = useState(userProfile?.color ?? '#7c3aed')
+  const [phone, setPhone] = useState(() => { const p = userProfile?.phone; return p && !p.includes('@') && /\d/.test(p) ? p : '' })
+  const [bio, setBio] = useState(userProfile?.bio ?? '')
+
+  // Re-sync form when the active user profile changes (e.g. after account switch)
+  useEffect(() => {
+    setDisplayName(userProfile?.displayName ?? '')
+    setProfileColor(userProfile?.color ?? '#7c3aed')
+    const p = userProfile?.phone; setPhone(p && !p.includes('@') && /\d/.test(p) ? p : '')
+    setBio(userProfile?.bio ?? '')
+  }, [userProfile?.uid])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [calendarNameLocal, setCalendarNameLocal] = useState(calendarName)
@@ -130,7 +140,7 @@ export default function SettingsPage() {
 
   const handleSaveProfile = async () => {
     setSaving(true)
-    await updateProfile({ displayName: displayName.trim() || userProfile?.displayName, color: profileColor })
+    const cleanPhone = phone.trim(); await updateProfile({ displayName: displayName.trim() || userProfile?.displayName, color: profileColor, phone: /\d/.test(cleanPhone) ? cleanPhone : '', bio: bio.trim() })
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -164,7 +174,7 @@ export default function SettingsPage() {
     if (!user) return
     setUploadingPhoto(true)
     try {
-      const dataUrl = await resizeImageToBase64(file, 160)
+      const dataUrl = await resizeImageToBase64(file, 2048)
       await updatePhotoURL(dataUrl)
     } catch (err: any) {
       console.error('Photo upload failed:', err)
@@ -320,6 +330,18 @@ export default function SettingsPage() {
               </div>
             </label>
           </div>
+
+          <div className="card p-4 mt-3">
+            <label className="flex items-center justify-between cursor-pointer" onClick={() => setHideTitleBar(!hideTitleBar)}>
+              <div>
+                <p className="text-sm font-medium text-text-primary">Hide title bar</p>
+                <p className="text-xs text-text-muted mt-0.5">Hide the minimize / maximize / close buttons</p>
+              </div>
+              <div className={clsx('w-11 h-6 rounded-full transition-colors relative shrink-0', hideTitleBar ? 'bg-violet-600' : 'bg-surface-active')}>
+                <div className={clsx('absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform', hideTitleBar ? 'translate-x-5' : 'translate-x-0.5')} />
+              </div>
+            </label>
+          </div>
         </section>
 
         {/* ── Profile ─────────────────────────────────────────── */}
@@ -387,6 +409,32 @@ export default function SettingsPage() {
                 className="input"
                 placeholder={t.displayName ?? 'Your name'}
               />
+            </div>
+
+            {/* Phone number */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">Phone number</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value.replace(/[^\d\s+\-().]/g, ''))}
+                className="input"
+                placeholder="+1 234 567 8900"
+              />
+            </div>
+
+            {/* Bio */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">Bio</label>
+              <textarea
+                value={bio}
+                onChange={e => setBio(e.target.value)}
+                className="input resize-none"
+                placeholder="A short bio about yourself"
+                maxLength={160}
+                rows={3}
+              />
+              <p className="text-xs text-text-muted mt-1 text-right">{bio.length}/160</p>
             </div>
 
             {/* Avatar color */}

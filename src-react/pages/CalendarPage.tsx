@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, subMonths, addWeeks, subWeeks,
-  isSameMonth, isToday, parseISO, differenceInDays,
+  isSameMonth, isToday, isBefore, startOfDay, parseISO, differenceInDays,
   addYears, getISOWeek, isSameDay, formatDistanceToNow } from 'date-fns'
 import { ChevronLeft, ChevronRight, Plus, X, Check, Pencil, Trash2, MapPin, Users, RefreshCw, Clock } from 'lucide-react'
 import { useSpace } from '../context/SpaceContext'
@@ -644,15 +644,21 @@ function getWeekMultiDayPlacements(week: Date[], events: CalendarEvent[]) {
     return end > ev.date && ev.date <= weekEndStr && end >= weekStartStr
   })
 
-  const placements: { ev: CalendarEvent; startCol: number; endCol: number; row: number; showTitle: boolean }[] = []
-  const rowUsage: boolean[][] = []
-
-  for (const ev of multiDay) {
+  // Pre-compute columns for each event so we can sort longest-first
+  const withCols = multiDay.map(ev => {
     const end = ev.endDate ?? ev.date
     const sc = ev.date < weekStartStr ? 0 : week.findIndex(d => format(d, 'yyyy-MM-dd') === ev.date)
     const rawEc = week.findIndex(d => format(d, 'yyyy-MM-dd') === end)
     const ec = end > weekEndStr ? 6 : rawEc < 0 ? 6 : rawEc
+    return { ev, sc, ec }
+  })
+  // Sort: longest span first, then earliest start — minimises gaps below events
+  withCols.sort((a, b) => (b.ec - b.sc) - (a.ec - a.sc) || a.sc - b.sc)
 
+  const placements: { ev: CalendarEvent; startCol: number; endCol: number; row: number; showTitle: boolean }[] = []
+  const rowUsage: boolean[][] = []
+
+  for (const { ev, sc, ec } of withCols) {
     let row = 0
     while (true) {
       if (!rowUsage[row]) rowUsage[row] = Array(7).fill(false)
@@ -707,13 +713,15 @@ function MiniCalendar({ selected, onSelect, onClose }: {
               const inMonth = isSameMonth(day, mini)
               const today = isToday(day)
               const sel = isSameDay(day, selected)
+              const past = isBefore(day, startOfDay(new Date())) && !today
               return (
                 <button key={di} onClick={() => { onSelect(day); onClose() }}
                   className={clsx(
                     'w-8 h-8 mx-auto flex items-center justify-center rounded-full text-xs font-medium transition-colors',
                     sel ? 'bg-violet-600 text-white' :
                     today ? 'border border-violet-600 text-violet-600' :
-                    inMonth ? 'text-text-primary hover:bg-surface-hover' : 'text-text-muted hover:bg-surface-hover'
+                    past && inMonth ? 'text-text-muted/50 hover:bg-surface-hover' :
+                    inMonth ? 'text-text-primary hover:bg-surface-hover' : 'text-text-muted/30 hover:bg-surface-hover'
                   )}>
                   {format(day, 'd')}
                 </button>
@@ -790,10 +798,16 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
           {weeks.map((week, wi) => {
             const { placements, numRows } = getWeekMultiDayPlacements(week, events)
             const weekNum = getISOWeek(week[1] ?? week[0])
-            // Per-column row count: how many multi-day rows overlap each day column
+            const weekStartStr = format(week[0], 'yyyy-MM-dd')
+            const weekEndStr   = format(week[6], 'yyyy-MM-dd')
+            // Per-column: first free row to start single-day events (fills gaps between multi-day bars)
             const colNumRows = Array.from({ length: 7 }, (_, col) => {
-              const rows = placements.filter(p => p.startCol <= col && p.endCol >= col).map(p => p.row)
-              return rows.length > 0 ? Math.max(...rows) + 1 : 0
+              const colPlacements = placements.filter(p => p.startCol <= col && p.endCol >= col)
+              if (colPlacements.length === 0) return 0
+              const occupied = new Set(colPlacements.map(p => p.row))
+              let firstFree = 0
+              while (occupied.has(firstFree)) firstFree++
+              return firstFree
             })
             return (
               <div key={wi} className="flex flex-1 border-b border-border last:border-b-0 min-h-0">
@@ -808,8 +822,8 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                   {placements.map((p, pi) => {
                     const color = getColor(p.ev)
                     const tc = getTextColor(p.ev)
-                    const startsBeforeWeek = p.ev.date < format(week[0], 'yyyy-MM-dd')
-                    const endsAfterWeek = (p.ev.endDate ?? p.ev.date) > format(week[6], 'yyyy-MM-dd')
+                    const startsBeforeWeek = p.ev.date < weekStartStr
+                    const endsAfterWeek = (p.ev.endDate ?? p.ev.date) > weekEndStr
                     const rL = startsBeforeWeek ? 0 : 11
                     const rR = endsAfterWeek ? 0 : 11
                     return (
@@ -843,7 +857,6 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                         className={clsx(
                           'border-r border-border last:border-r-0 cursor-pointer group overflow-hidden transition-colors',
                           inMonth ? 'hover:bg-surface-hover/40' : 'opacity-40',
-                          weekend && inMonth ? '' : ''
                         )}
                         style={weekend && inMonth ? { backgroundColor: weekendColor + '30' } : undefined}>
                         {/* Date number */}
@@ -857,8 +870,7 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                         </div>
                         {/* Single-day events */}
                         <div className="space-y-px px-0.5 pb-1 overflow-hidden" style={{ marginTop: colNumRows[di] * BAND_H }}>
-                          {singleEvs.slice(0, 3).map(ev => {
-                            return (
+                          {singleEvs.slice(0, 3).map(ev => (
                             <div key={ev.id} onClick={e => { e.stopPropagation(); onEventClick(ev, e) }}
                               className="text-xs px-1.5 py-px rounded-full font-medium cursor-pointer hover:brightness-95 leading-5 flex items-center gap-1 overflow-hidden min-h-[1.25rem]"
                               style={{ ...getEventBg(ev), color: getTextColor(ev) }}>
@@ -867,8 +879,7 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                               {ev.startTime && !ev.allDay && <span className="opacity-75 shrink-0">{formatTime(ev.startTime, use24Hour)}</span>}
                               <span className="truncate">{ev.title}</span>
                             </div>
-                          )})}
-
+                          ))}
                           {singleEvs.length > 3 && (
                             <p className="text-xs text-text-muted pl-1.5 leading-5">+{singleEvs.length - 3} more</p>
                           )}

@@ -23,7 +23,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string, displayName: string) => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
-  updateProfile: (data: { displayName?: string; color?: string }) => Promise<void>
+  updateProfile: (data: { displayName?: string; color?: string; phone?: string; bio?: string }) => Promise<void>
   updatePassword: (newPassword: string) => Promise<void>
   updatePhotoURL: (url: string | null) => Promise<void>
 }
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await firebaseSignOut(auth)
   }
 
-  const updateProfile = async (data: { displayName?: string; color?: string }) => {
+  const updateProfile = async (data: { displayName?: string; color?: string; phone?: string; bio?: string }) => {
     if (!user) return
     await updateDoc(doc(db, 'users', user.uid), data)
     // Update saved-accounts

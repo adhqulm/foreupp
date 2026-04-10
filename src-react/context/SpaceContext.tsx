@@ -52,13 +52,20 @@ interface SpaceContextValue {
   setActiveConversationId: (id: string | null) => void
   getOrCreateDM: (partnerUid: string) => Promise<string>
   createGroup: (name: string, memberIds: string[]) => Promise<string>
-  sendMessage: (conversationId: string, text: string, attachments?: MessageAttachment[]) => Promise<void>
-  deleteMessage: (id: string) => Promise<void>
+  sendMessage: (conversationId: string, text: string, attachments?: MessageAttachment[], replyTo?: { id: string; text: string; senderName: string }) => Promise<void>
+  deleteMessage: (id: string, forBoth: boolean) => Promise<void>
   reactToMessage: (id: string, emoji: string) => Promise<void>
   markMessagesRead: (messageIds: string[]) => Promise<void>
   setTyping: () => Promise<void>
   updateConversation: (id: string, data: Partial<Conversation>) => Promise<void>
   leaveGroup: (conversationId: string) => Promise<void>
+  pinMessage: (id: string, forBoth: boolean) => Promise<void>
+  forwardMessage: (id: string, targetConvId: string) => Promise<void>
+  getMessagesForConversation: (convId: string) => Promise<Message[]>
+  pinConversation: (id: string) => Promise<void>
+  muteConversation: (id: string) => Promise<void>
+  markConversationUnread: (id: string) => Promise<void>
+  clearHistory: (convId: string, forBoth: boolean) => Promise<void>
 }
 
 const SpaceContext = createContext<SpaceContextValue | null>(null)
@@ -242,7 +249,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     })
   }, [activeConversationId])
 
-  // Typing indicator
+  // Typing indicator — scoped to the active conversation
   useEffect(() => {
     if (!spaceId || !user) return
     return onSnapshot(doc(db, 'spaces', spaceId), (snap) => {
@@ -250,9 +257,11 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       const data = snap.data()
       const typing = data.typing ?? {}
       const now = Date.now()
-      const isPartnerTyping = Object.entries(typing).some(
-        ([uid, ts]) => uid !== user.uid && (now - (ts as number)) < 4000
-      )
+      const isPartnerTyping = Object.entries(typing).some(([uid, val]) => {
+        if (uid === user.uid) return false
+        const entry = val as { ts: number; conversationId: string }
+        return (now - entry.ts) < 4000 && entry.conversationId === activeConversationId
+      })
       if (isPartnerTyping) {
         setPartnerTyping(true)
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
@@ -262,7 +271,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
       }
     })
-  }, [spaceId, user])
+  }, [spaceId, user, activeConversationId])
 
   const createSpace = async () => {
     if (!user) return
@@ -528,16 +537,20 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     const conv = conversations.find(c => c.id === conversationId)
     if (!conv) return
     const newMembers = conv.memberIds.filter(uid => uid !== user.uid)
+    if (activeConversationId === conversationId) setActiveConversationId(null)
     if (newMembers.length === 0) {
-      const { deleteDoc } = await import('firebase/firestore')
+      const { deleteDoc, getDocs } = await import('firebase/firestore')
+      // Delete all messages in the conversation
+      const msgSnap = await getDocs(query(collection(db, 'messages'), where('conversationId', '==', conversationId)))
+      await Promise.all(msgSnap.docs.map(d => deleteDoc(d.ref)))
+      // Delete the conversation itself
       await deleteDoc(doc(db, 'conversations', conversationId))
     } else {
       await updateDoc(doc(db, 'conversations', conversationId), { memberIds: newMembers })
     }
-    if (activeConversationId === conversationId) setActiveConversationId(null)
   }
 
-  const sendMessage = async (conversationId: string, text: string, attachments?: MessageAttachment[]) => {
+  const sendMessage = async (conversationId: string, text: string, attachments?: MessageAttachment[], replyTo?: { id: string; text: string; senderName: string }) => {
     if (!user || !spaceId || !conversationId) return
     const now = Date.now()
     await addDoc(collection(db, 'messages'), {
@@ -548,19 +561,117 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       createdAt: now,
       readBy: [user.uid],
       reactions: {},
-      ...(attachments && attachments.length > 0 ? { attachments } : {})
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      ...(replyTo ? { replyTo } : {}),
     })
-    // Update conversation's last message info
     await updateDoc(doc(db, 'conversations', conversationId), {
       lastMessageAt: now,
-      lastMessageText: text.slice(0, 60)
+      lastMessageText: text.slice(0, 60),
     })
   }
 
-  const deleteMessage = async (id: string) => {
-    if (!spaceId) return
-    const { deleteDoc } = await import('firebase/firestore')
-    await deleteDoc(doc(db, 'messages', id))
+  const deleteMessage = async (id: string, forBoth: boolean) => {
+    if (!user) return
+    if (forBoth) {
+      const { deleteDoc } = await import('firebase/firestore')
+      await deleteDoc(doc(db, 'messages', id))
+    } else {
+      await updateDoc(doc(db, 'messages', id), { deletedFor: arrayUnion(user.uid) })
+    }
+  }
+
+  const pinMessage = async (id: string, forBoth: boolean) => {
+    if (!user) return
+    const msg = messages.find(m => m.id === id)
+    if (!msg) return
+    const alreadyPinned = msg.pinnedBy?.includes(user.uid)
+    if (alreadyPinned) {
+      // Unpin
+      const conv = conversations.find(c => c.id === msg.conversationId)
+      const targets = forBoth ? (conv?.memberIds ?? [user.uid]) : [user.uid]
+      const newPinnedBy = (msg.pinnedBy ?? []).filter(u => !targets.includes(u))
+      await updateDoc(doc(db, 'messages', id), { pinnedBy: newPinnedBy })
+    } else {
+      const conv = conversations.find(c => c.id === msg.conversationId)
+      const targets = forBoth ? (conv?.memberIds ?? [user.uid]) : [user.uid]
+      await updateDoc(doc(db, 'messages', id), { pinnedBy: arrayUnion(...targets) })
+    }
+  }
+
+  const forwardMessage = async (id: string, targetConvId: string) => {
+    if (!user || !spaceId) return
+    const msg = messages.find(m => m.id === id)
+    if (!msg) return
+    const now = Date.now()
+    await addDoc(collection(db, 'messages'), {
+      spaceId,
+      conversationId: targetConvId,
+      senderId: user.uid,
+      text: msg.text,
+      createdAt: now,
+      readBy: [user.uid],
+      reactions: {},
+      forwardedFrom: id,
+      ...(msg.attachments && msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
+    })
+    await updateDoc(doc(db, 'conversations', targetConvId), {
+      lastMessageAt: now,
+      lastMessageText: msg.text.slice(0, 60),
+    })
+  }
+
+  const getMessagesForConversation = async (convId: string): Promise<Message[]> => {
+    const snap = await getDocs(query(collection(db, 'messages'), where('conversationId', '==', convId)))
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Message)).sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  const pinConversation = async (id: string) => {
+    if (!user) return
+    const conv = conversations.find(c => c.id === id)
+    if (!conv) return
+    const pinned = conv.pinnedBy?.includes(user.uid)
+    await updateDoc(doc(db, 'conversations', id), {
+      pinnedBy: pinned
+        ? (conv.pinnedBy ?? []).filter(u => u !== user.uid)
+        : arrayUnion(user.uid)
+    })
+  }
+
+  const muteConversation = async (id: string) => {
+    if (!user) return
+    const conv = conversations.find(c => c.id === id)
+    if (!conv) return
+    const muted = conv.mutedBy?.includes(user.uid)
+    await updateDoc(doc(db, 'conversations', id), {
+      mutedBy: muted
+        ? (conv.mutedBy ?? []).filter(u => u !== user.uid)
+        : arrayUnion(user.uid)
+    })
+  }
+
+  const markConversationUnread = async (id: string) => {
+    if (!user) return
+    const conv = conversations.find(c => c.id === id)
+    if (!conv) return
+    const isUnread = conv.unreadFor?.includes(user.uid)
+    await updateDoc(doc(db, 'conversations', id), {
+      unreadFor: isUnread
+        ? (conv.unreadFor ?? []).filter(u => u !== user.uid)
+        : arrayUnion(user.uid)
+    })
+  }
+
+  const clearHistory = async (convId: string, forBoth: boolean) => {
+    if (!user) return
+    const { deleteDoc, getDocs } = await import('firebase/firestore')
+    const snap = await getDocs(query(collection(db, 'messages'), where('conversationId', '==', convId)))
+    if (forBoth) {
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+    } else {
+      await Promise.all(snap.docs.map(d =>
+        updateDoc(d.ref, { deletedFor: arrayUnion(user.uid) })
+      ))
+    }
   }
 
   const reactToMessage = async (id: string, emoji: string) => {
@@ -582,8 +693,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   }
 
   const setTyping = async () => {
-    if (!user || !spaceId) return
-    await updateDoc(doc(db, 'spaces', spaceId), { [`typing.${user.uid}`]: Date.now() })
+    if (!user || !spaceId || !activeConversationId) return
+    await updateDoc(doc(db, 'spaces', spaceId), {
+      [`typing.${user.uid}`]: { ts: Date.now(), conversationId: activeConversationId }
+    })
   }
 
   // Clear all cached space data on sign-out
@@ -609,6 +722,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       conversations, activeConversationId, setActiveConversationId,
       getOrCreateDM, createGroup,
       sendMessage, deleteMessage, reactToMessage, markMessagesRead, setTyping,
+      pinMessage, forwardMessage, getMessagesForConversation, pinConversation, muteConversation, markConversationUnread, clearHistory,
       updateConversation, leaveGroup
     }}>
       {children}

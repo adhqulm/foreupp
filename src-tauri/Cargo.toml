@@ -12,7 +12,7 @@ rust-version = "1.60"
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-tauri = { version = "1.6", features = [
+tauri = { version = "1.6", features = [ "fs-write-file", "dialog-save",
   "window-all",
   "shell-open"
 ] }

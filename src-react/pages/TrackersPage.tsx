@@ -134,6 +134,8 @@ export default function TrackersPage() {
             userId={user?.uid ?? ''}
             getEntry={(trackerId, date, uid) => getEntry(trackerId, date, uid)}
             onCheck={(tracker, date) => handleCheck(tracker, date)}
+            onNumber={(tracker, date, val) => handleNumber(tracker, date, val)}
+            onRating={(tracker, date, val) => handleRating(tracker, date, val)}
             onEdit={(tracker) => setEditing(tracker)}
           />
         ) : (
@@ -172,12 +174,14 @@ export default function TrackersPage() {
 
 // ─── Full Grid View ───────────────────────────────────────────────────────────
 
-function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onEdit }: {
+function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onNumber, onRating, onEdit }: {
   trackers: Tracker[]
   weekDays: { date: string; label: string; day: string; month: string }[]
   userId: string
   getEntry: (trackerId: string, date: string, uid: string) => TrackerEntry | undefined
   onCheck: (tracker: Tracker, date: string) => void
+  onNumber: (tracker: Tracker, date: string, val: number) => void
+  onRating: (tracker: Tracker, date: string, val: number) => void
   onEdit: (tracker: Tracker) => void
 }) {
   // Each row = flex with strict 50/50 split, circles section uses grid-cols-7 within its half
@@ -196,9 +200,11 @@ function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onEdit }:
         right={weekDays.map(({ date, label, day }) => {
           const today = date === TODAY
           return (
-            <div key={date} className="flex flex-col items-center justify-end pb-3">
+            <div key={date} className="flex flex-col items-center justify-end pb-2">
               <span className={clsx('text-xs font-bold leading-none', today ? 'text-violet-400' : 'text-text-secondary')}>{label[0]}</span>
-              <span className={clsx('text-[10px] mt-0.5 leading-none', today ? 'text-violet-300' : 'text-text-muted')}>{day}</span>
+              <div className={clsx('w-5 h-5 rounded-full flex items-center justify-center mt-0.5', today && 'bg-violet-500/20')}>
+                <span className={clsx('text-[10px] leading-none', today ? 'text-violet-400 font-semibold' : 'text-text-muted')}>{day}</span>
+              </div>
             </div>
           )
         })}
@@ -231,26 +237,44 @@ function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onEdit }:
 
             return (
               <div key={date} className="flex items-center justify-center py-2.5">
-                <button
-                  onClick={() => !future && tracker.type === 'checkbox' && onCheck(tracker, date)}
-                  disabled={future || tracker.type !== 'checkbox'}
-                  className={clsx(
-                    'w-10 h-10 rounded-full transition-all flex items-center justify-center',
-                    future ? 'opacity-20 cursor-not-allowed' :
-                    tracker.type === 'checkbox' ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default',
-                    filled ? '' : today ? 'bg-border/60 ring-2 ring-violet-400/40' : 'bg-border/60'
-                  )}
-                  style={filled ? { backgroundColor: tracker.color } : {}}
-                >
-                  {filled && tracker.type === 'checkbox' && (
-                    <svg viewBox="0 0 12 12" className="w-3.5 h-3.5" fill="none">
-                      <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                  {filled && tracker.type !== 'checkbox' && (
-                    <span className="text-white text-[10px] font-bold leading-none">{entry?.value as number}</span>
-                  )}
-                </button>
+                {tracker.type === 'checkbox' && (
+                  <button
+                    onClick={() => !future && onCheck(tracker, date)}
+                    disabled={future}
+                    className={clsx(
+                      'w-10 h-10 rounded-full transition-all flex items-center justify-center',
+                      future ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer hover:scale-105 active:scale-95',
+                      filled ? '' : 'bg-border/60'
+                    )}
+                    style={filled ? { backgroundColor: tracker.color } : {}}
+                  >
+                    {filled && (
+                      <svg viewBox="0 0 12 12" className="w-3.5 h-3.5" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+                {tracker.type === 'number' && (
+                  <input
+                    type="number"
+                    defaultValue={(entry?.value as number) ?? ''}
+                    onBlur={e => { const v = parseFloat(e.target.value); onNumber(tracker, date, isNaN(v) ? 0 : v) }}
+                    disabled={future}
+                    className={clsx('w-10 h-8 text-center text-xs input px-1 py-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none', future && 'opacity-20 cursor-not-allowed')}
+                    min={0}
+                  />
+                )}
+                {tracker.type === 'rating' && (
+                  <div className="flex gap-0.5">
+                    {Array.from({ length: tracker.maxRating ?? 5 }, (_, i) => (
+                      <button key={i} onClick={() => !future && onRating(tracker, date, i + 1)} disabled={future}
+                        className={clsx('text-xs transition-transform', future ? 'opacity-20 cursor-not-allowed' : 'hover:scale-125')}>
+                        <span style={{ color: !future && (entry?.value as number ?? 0) > i ? tracker.color : '#9ca3af' }}>★</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -281,7 +305,7 @@ function TrackerRow({ tracker, weekDays, streak, getEntry, onCheck, onNumber, on
   const creatorName = members[tracker.createdBy]?.displayName ?? tracker.createdBy
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card overflow-hidden" style={tracker.bgColor ? { backgroundColor: tracker.bgColor } : {}}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0"
@@ -343,8 +367,8 @@ function TrackerRow({ tracker, weekDays, streak, getEntry, onCheck, onNumber, on
               {tracker.type === 'number' && (
                 <input type="number"
                   defaultValue={(myEntry?.value as number) ?? ''}
-                  onBlur={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onNumber(date, v) }}
-                  className={clsx('w-10 h-8 text-center text-xs input px-1 py-0', future && 'opacity-25 cursor-not-allowed')}
+                  onBlur={e => { const v = parseFloat(e.target.value); onNumber(date, isNaN(v) ? 0 : v) }}
+                  className={clsx('w-10 h-8 text-center text-xs input px-1 py-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none', future && 'opacity-25 cursor-not-allowed')}
                   min={0} disabled={future} />
               )}
 
@@ -353,7 +377,7 @@ function TrackerRow({ tracker, weekDays, streak, getEntry, onCheck, onNumber, on
                   {Array.from({ length: tracker.maxRating ?? 5 }, (_, i) => (
                     <button key={i} onClick={() => !future && onRating(date, i + 1)} disabled={future}
                       className={clsx('text-xs transition-transform', future ? 'opacity-25 cursor-not-allowed' : 'hover:scale-125')}>
-                      <span style={{ color: !future && (myEntry?.value as number ?? 0) > i ? tracker.color : '#374151' }}>★</span>
+                      <span style={{ color: !future && (myEntry?.value as number ?? 0) > i ? tracker.color : '#9ca3af' }}>★</span>
                     </button>
                   ))}
                 </div>
@@ -390,6 +414,9 @@ function CreateTrackerModal({ existing, onClose, onAdd, onUpdate }: {
   const [description, setDescription] = useState(existing?.description ?? '')
   const [emoji, setEmoji] = useState(existing?.emoji ?? '')
   const [color, setColor] = useState(existing?.color ?? '#7c3aed')
+  const [showColorPicker, setShowColorPicker] = useState(false)
+  const [bgColor, setBgColor] = useState(existing?.bgColor ?? '')
+  const [showBgColorPicker, setShowBgColorPicker] = useState(false)
   const [type, setType] = useState<Tracker['type']>(existing?.type ?? 'checkbox')
   const [unit, setUnit] = useState(existing?.unit ?? '')
   const [maxRating, setMaxRating] = useState(existing?.maxRating ?? 5)
@@ -401,7 +428,7 @@ function CreateTrackerModal({ existing, onClose, onAdd, onUpdate }: {
     if (!name.trim()) return
     setLoading(true); setError('')
     try {
-      const payload: any = { name: name.trim(), description, emoji, color, type, isShared: true }
+      const payload: any = { name: name.trim(), description, emoji, color, bgColor, type, isShared: true }
       if (type === 'number' && unit) payload.unit = unit
       if (type === 'rating') payload.maxRating = maxRating
       if (existing && onUpdate) await onUpdate(payload)
@@ -453,8 +480,29 @@ function CreateTrackerModal({ existing, onClose, onAdd, onUpdate }: {
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-2">{t.color ?? 'Color'}</label>
-            <ColorPresetPicker color={color} onChange={setColor} />
+            <button type="button" onClick={() => setShowColorPicker(v => !v)}
+              className="flex items-center gap-1 text-xs font-medium text-text-secondary mb-2 hover:text-text-primary transition-colors">
+              {t.color ?? 'Accent colour'}
+              <ChevronRight size={12} className={clsx('transition-transform', showColorPicker && 'rotate-90')} />
+            </button>
+            {showColorPicker && <ColorPresetPicker color={color} onChange={setColor} />}
+          </div>
+          <div>
+            <button type="button" onClick={() => setShowBgColorPicker(v => !v)}
+              className="flex items-center gap-1 text-xs font-medium text-text-secondary mb-2 hover:text-text-primary transition-colors">
+              Background colour
+              <ChevronRight size={12} className={clsx('transition-transform', showBgColorPicker && 'rotate-90')} />
+            </button>
+            {showBgColorPicker && (
+              <div className="flex items-center gap-2">
+                <ColorPresetPicker color={bgColor || '#ffffff'} onChange={setBgColor} />
+                {bgColor && (
+                  <button type="button" onClick={() => setBgColor('')} className="text-xs text-text-muted hover:text-red-500 transition-colors shrink-0">
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
           <button type="submit" className="btn-primary w-full" disabled={loading || !name.trim()}>

@@ -7,6 +7,8 @@ export interface UserProfile {
   inviteCode?: string
   photoURL?: string
   lastSeen?: number
+  phone?: string
+  bio?: string
 }
 
 export interface Space {
@@ -60,6 +62,7 @@ export interface Tracker {
   description?: string
   emoji?: string
   color: string
+  bgColor?: string
   type: 'checkbox' | 'number' | 'rating' | 'text'
   unit?: string // for number type (e.g. "glasses", "km")
   maxRating?: number // for rating type
@@ -169,6 +172,10 @@ export interface Message {
   readBy: string[]
   reactions: Record<string, string> // { [uid]: emoji }
   attachments?: MessageAttachment[]
+  replyTo?: { id: string; text: string; senderName: string }
+  pinnedBy?: string[]     // uids who have pinned this message
+  deletedFor?: string[]   // uids for whom this message is deleted
+  forwardedFrom?: string  // original message id if forwarded
 }
 
 export interface Conversation {
@@ -176,9 +183,12 @@ export interface Conversation {
   spaceId: string
   type: 'dm' | 'group'
   memberIds: string[]
-  name?: string       // group name
+  name?: string
   lastMessageAt?: number
   lastMessageText?: string
   createdBy?: string
   photoURL?: string
+  pinnedBy?: string[]   // uids who pinned this chat
+  mutedBy?: string[]    // uids who muted this chat
+  unreadFor?: string[]  // uids who marked this chat as unread
 }

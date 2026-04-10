@@ -739,8 +739,8 @@ function KanbanColumnView({ col, cards, boardColor, dragCardId, dragOverColId, d
         isColDragOver ? 'border-violet-500/60 bg-violet-500/8 ring-1 ring-violet-500/30' :
         isDragOver && !dragOverCardId ? 'border-violet-500/50 bg-violet-500/5' : 'border-border bg-bg-secondary')}
       style={{ maxHeight: 'calc(100vh - 140px)' }}
-      onDragOver={e => { e.preventDefault(); if (dragColId) onColDragOver(); else onDragOverCol(col.id) }}
-      onDrop={e => { e.preventDefault(); if (dragColId) onColDrop(); else onDrop(col.id) }}
+      onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (dragColId) onColDragOver(); else onDragOverCol(col.id) }}
+      onDrop={e => { e.preventDefault(); e.stopPropagation(); if (dragColId) onColDrop(); else onDrop(col.id) }}
     >
       <div
         className="px-3 pt-3 pb-2 shrink-0 cursor-grab active:cursor-grabbing"
@@ -798,7 +798,7 @@ function KanbanColumnView({ col, cards, boardColor, dragCardId, dragOverColId, d
         {dragCardId && isDragOver && (
           <div className="h-2 rounded-lg bg-violet-500/30"
             onDragOver={e => { e.preventDefault(); onDragOverCard(null) }}
-            onDrop={e => { e.preventDefault(); onDrop(col.id) }} />
+            onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop(col.id) }} />
         )}
       </div>
 
@@ -840,10 +840,10 @@ function KanbanCardView({ card, boardColor, isDragging, isDragOver, onDragStart,
   return (
     <div
       draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
-      onDragEnd={onDragEnd}
-      onDragOver={e => { e.preventDefault(); onDragOver() }}
-      onDrop={e => { e.preventDefault(); onDrop() }}
+      onDragStart={e => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
+      onDragEnd={e => { e.stopPropagation(); onDragEnd() }}
+      onDragOver={e => { e.preventDefault(); e.stopPropagation(); onDragOver() }}
+      onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop() }}
       onClick={onClick}
       className={clsx('group rounded-lg border bg-bg-primary px-3 py-2.5 cursor-pointer transition-all select-none overflow-hidden',
         isDragging ? 'opacity-40' : 'hover:border-violet-500/40',
@@ -1175,6 +1175,7 @@ function BoardModal({ existing, onClose, onSaved }: {
   const [description, setDescription] = useState(existing?.description ?? '')
   const [emoji, setEmoji] = useState(existing?.emoji ?? '')
   const [color, setColor] = useState(existing?.color ?? '#7c3aed')
+  const [showColorPicker, setShowColorPicker] = useState(false)
   const [boardType, setBoardType] = useState<'kanban' | 'progress'>(existing?.boardType ?? 'kanban')
   const [loading, setLoading] = useState(false)
 
@@ -1244,8 +1245,12 @@ function BoardModal({ existing, onClose, onSaved }: {
           <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="input" placeholder="Description (optional)" />
 
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-2">Color</label>
-            <ColorPresetPicker color={color} onChange={setColor} />
+            <button type="button" onClick={() => setShowColorPicker(v => !v)}
+              className="flex items-center gap-1 text-xs font-medium text-text-secondary mb-2 hover:text-text-primary transition-colors">
+              Color
+              <ChevronRight size={12} className={clsx('transition-transform', showColorPicker && 'rotate-90')} />
+            </button>
+            {showColorPicker && <ColorPresetPicker color={color} onChange={setColor} />}
           </div>
 
           <button type="submit" disabled={loading || !title.trim()} className="btn-primary w-full">

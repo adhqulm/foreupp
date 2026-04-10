@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Calendar, BarChart2, Timer, Settings2, UserPlus, LogOut, ChevronUp, ChevronLeft, ChevronRight, X, LayoutGrid, Send } from 'lucide-react'
+import { Calendar, BarChart2, Timer, Settings2, UserPlus, LogOut, ChevronUp, ChevronLeft, ChevronRight, X, LayoutGrid, Send, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useSpace } from '../../context/SpaceContext'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -32,6 +32,7 @@ export default function Sidebar() {
   const t = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
 
   // Auto-collapse when window is too narrow
   useEffect(() => {
@@ -40,8 +41,8 @@ export default function Sidebar() {
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([])
-  const [showAddAccount, setShowAddAccount] = useState(false)
   const [addEmail, setAddEmail] = useState('')
   const [addPassword, setAddPassword] = useState('')
   const [addError, setAddError] = useState('')
@@ -59,17 +60,29 @@ export default function Sidebar() {
       setPopoverPos({
         bottom: window.innerHeight - rect.top + 8,
         left: rect.left,
-        width: Math.max(rect.width, 220),
+        width: Math.max(rect.width, 320),
       })
     }
+    setShowAddForm(false)
+    setAddEmail('')
+    setAddPassword('')
+    setAddError('')
     setAccountMenuOpen(true)
+  }
+
+  const closeMenu = () => {
+    setAccountMenuOpen(false)
+    setShowAddForm(false)
+    setAddEmail('')
+    setAddPassword('')
+    setAddError('')
   }
 
   const handleSignOut = async () => { await signOut(); navigate('/login') }
 
   const handleSwitchAccount = async (account: SavedAccount) => {
-    if (account.uid === user?.uid) { setAccountMenuOpen(false); return }
-    setAccountMenuOpen(false)
+    if (account.uid === user?.uid) { closeMenu(); return }
+    closeMenu()
     if (account._p) {
       try {
         await signOut()
@@ -92,9 +105,7 @@ export default function Sidebar() {
     try {
       await signOut()
       await signIn(addEmail, addPassword)
-      setShowAddAccount(false)
-      setAddEmail('')
-      setAddPassword('')
+      closeMenu()
       navigate('/calendar')
     } catch (err: any) {
       setAddError(err.message?.includes('invalid-credential') ? 'Invalid email or password' : 'Something went wrong')
@@ -104,6 +115,7 @@ export default function Sidebar() {
 
   const avatarSrc = userProfile?.photoURL
   const initials = (userProfile?.displayName?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()
+  const displayName = userProfile?.displayName ?? user?.email ?? 'You'
 
   return (
     <>
@@ -213,92 +225,169 @@ export default function Sidebar() {
         </div>
       </aside>
 
-      {/* Account menu — fixed so it's never clipped */}
+      {/* Profile popup — fixed so it's never clipped */}
       {accountMenuOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setAccountMenuOpen(false)} />
-          <div className="fixed z-50 bg-bg-secondary border border-border rounded-xl shadow-xl overflow-hidden"
-            style={{ bottom: popoverPos.bottom, left: popoverPos.left, width: popoverPos.width, minWidth: 220 }}>
+          {/* Click-outside overlay */}
+          <div className="fixed inset-0 z-40" onClick={closeMenu} />
 
-            {savedAccounts.length > 0 && (
-              <div className="px-2 py-2 border-b border-border">
-                <p className="text-xs text-text-muted font-semibold uppercase tracking-wider px-2 mb-1.5">{t.switchAccount ?? 'Accounts'}</p>
-                {savedAccounts.map(account => (
-                  <button key={account.uid} onClick={() => handleSwitchAccount(account)}
-                    className={clsx('w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors',
-                      account.uid === user?.uid ? 'bg-violet-600/15 text-text-primary' : 'text-text-secondary hover:bg-surface-hover')}>
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
-                      style={{ backgroundColor: account.photoURL ? 'transparent' : '#7c3aed' }}>
-                      {account.photoURL
-                        ? <img src={account.photoURL} alt="" className="w-full h-full object-cover" />
-                        : (account.displayName?.[0] ?? account.email?.[0] ?? 'U').toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-xs font-medium truncate">{account.displayName || account.email}</p>
-                      <p className="text-xs text-text-muted truncate">{account.email}</p>
-                    </div>
-                    {account.uid === user?.uid && <div className="w-2 h-2 rounded-full bg-violet-600 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div
+            className="fixed z-50 bg-bg-secondary border border-border rounded-2xl shadow-xl overflow-hidden"
+            style={{ bottom: popoverPos.bottom, left: popoverPos.left, width: 320 }}
+          >
+            {!showAddForm ? (
+              <>
+                {/* ── Profile header ── */}
+                <div className="px-4 py-5 flex flex-col items-center text-center">
+                  {/* Large avatar */}
+                  <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white overflow-hidden shrink-0"
+                    style={{ backgroundColor: avatarSrc ? 'transparent' : (userProfile?.color ?? '#7c3aed') }}
+                  >
+                    {avatarSrc
+                      ? <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
+                      : initials}
+                  </div>
 
-            <div className="px-2 py-2">
-              <button onClick={() => { setAccountMenuOpen(false); setShowAddAccount(true) }}
-                className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-text-secondary hover:bg-surface-hover transition-colors">
-                <div className="w-7 h-7 rounded-full border-2 border-dashed border-border flex items-center justify-center shrink-0">
-                  <UserPlus size={13} className="text-text-muted" />
+                  {/* Display name */}
+                  <p className="text-base font-semibold text-text-primary mt-3">{displayName}</p>
+
+                  {/* Email */}
+                  <p className="text-xs text-text-muted mt-1">{userProfile?.email ?? user?.email}</p>
+
+                  {/* Phone (if present and not an email address) */}
+                  {userProfile?.phone && !userProfile.phone.includes('@') && (
+                    <p className="text-xs text-text-secondary mt-1">{userProfile.phone}</p>
+                  )}
+
+                  {/* Bio (if present) */}
+                  {userProfile?.bio && (
+                    <p className="text-xs text-text-muted mt-2 italic leading-relaxed max-w-[200px]">{userProfile.bio}</p>
+                  )}
+
+                  {/* Online status */}
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                    <span className="text-xs text-green-500">Online</span>
+                  </div>
                 </div>
-                <span>{t.addAccount ?? 'Add account'}</span>
-              </button>
-            </div>
 
-            <div className="px-2 py-2 border-t border-border">
-              <button onClick={handleSignOut}
-                className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-red-500 hover:bg-red-500/10 transition-colors">
-                <LogOut size={14} />
-                <span>{t.signOut ?? 'Sign out'}</span>
-              </button>
-            </div>
+                {/* ── Divider ── */}
+                <div className="border-t border-border" />
+
+                {/* ── Saved accounts ── */}
+                {savedAccounts.length > 0 && (
+                  <>
+                    <div className="px-2 py-2">
+                      <p className="text-xs text-text-muted font-semibold uppercase tracking-wider px-2 py-2">
+                        {t.switchAccount ?? 'Accounts'}
+                      </p>
+                      {savedAccounts.map(account => (
+                        <button
+                          key={account.uid}
+                          onClick={() => handleSwitchAccount(account)}
+                          className={clsx(
+                            'w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors',
+                            account.uid === user?.uid
+                              ? 'bg-violet-600/15 text-text-primary'
+                              : 'text-text-secondary hover:bg-surface-hover'
+                          )}
+                        >
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
+                            style={{ backgroundColor: account.photoURL ? 'transparent' : '#7c3aed' }}
+                          >
+                            {account.photoURL
+                              ? <img src={account.photoURL} alt="" className="w-full h-full object-cover" />
+                              : (account.displayName?.[0] ?? account.email?.[0] ?? 'U').toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0 text-left">
+                            <p className="text-xs font-medium truncate">{account.displayName || account.email}</p>
+                            <p className="text-xs text-text-muted truncate">{account.email}</p>
+                          </div>
+                          {account.uid === user?.uid && (
+                            <div className="w-2 h-2 rounded-full bg-violet-600 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* ── Divider ── */}
+                    <div className="border-t border-border" />
+                  </>
+                )}
+
+                {/* ── Add account ── */}
+                <div className="px-2 py-2">
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-text-secondary hover:bg-surface-hover transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-full border-2 border-dashed border-border flex items-center justify-center shrink-0">
+                      <UserPlus size={13} className="text-text-muted" />
+                    </div>
+                    <span>{t.addAccount ?? 'Add account'}</span>
+                  </button>
+                </div>
+
+                {/* ── Divider ── */}
+                <div className="border-t border-border" />
+
+                {/* ── Sign out ── */}
+                <div className="px-2 py-2">
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                  >
+                    <LogOut size={14} />
+                    <span>{t.signOut ?? 'Sign out'}</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* ── Inline add-account form ── */}
+                <div className="px-4 py-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button
+                      onClick={() => { setShowAddForm(false); setAddError('') }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors shrink-0"
+                    >
+                      <ArrowLeft size={14} />
+                    </button>
+                    <h3 className="text-sm font-semibold text-text-primary">{t.addAccount ?? 'Add account'}</h3>
+                  </div>
+
+                  <form onSubmit={handleAddAccount} className="space-y-3">
+                    <input
+                      type="email"
+                      value={addEmail}
+                      onChange={e => setAddEmail(e.target.value)}
+                      className="input w-full"
+                      placeholder="Email"
+                      required
+                      autoFocus
+                    />
+                    <input
+                      type="password"
+                      value={addPassword}
+                      onChange={e => setAddPassword(e.target.value)}
+                      className="input w-full"
+                      placeholder="Password"
+                      required
+                    />
+                    {addError && (
+                      <p className="text-sm text-red-500 bg-red-500/10 rounded-lg px-3 py-2">{addError}</p>
+                    )}
+                    <button type="submit" className="btn-primary w-full" disabled={addLoading}>
+                      {addLoading ? '...' : (t.signIn ?? 'Sign in')}
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
           </div>
         </>
-      )}
-
-      {/* Add account modal */}
-      {showAddAccount && (
-        <div className="modal-overlay" onClick={() => setShowAddAccount(false)}>
-          <div className="modal max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-semibold text-text-primary">{t.addAccount ?? 'Add account'}</h3>
-              <button onClick={() => setShowAddAccount(false)} className="btn-ghost p-1.5"><X size={16} /></button>
-            </div>
-            <form onSubmit={handleAddAccount} className="space-y-3">
-              <input
-                type="email"
-                value={addEmail}
-                onChange={e => setAddEmail(e.target.value)}
-                className="input"
-                placeholder="Email"
-                required
-                autoFocus
-              />
-              <input
-                type="password"
-                value={addPassword}
-                onChange={e => setAddPassword(e.target.value)}
-                className="input"
-                placeholder="Password"
-                required
-              />
-              {addError && (
-                <p className="text-sm text-red-500 bg-red-500/10 rounded-lg px-3 py-2">{addError}</p>
-              )}
-              <button type="submit" className="btn-primary w-full" disabled={addLoading}>
-                {addLoading ? '...' : (t.signIn ?? 'Sign in')}
-              </button>
-            </form>
-          </div>
-        </div>
       )}
     </>
   )

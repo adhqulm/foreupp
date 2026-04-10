@@ -7,12 +7,14 @@ interface AppSettings {
   calendarName: string
   weekendColor: string
   use24Hour: boolean
+  hideTitleBar: boolean
   setHighlightWeekends: (v: boolean) => void
   setLanguage: (v: string) => void
   setTimezone: (v: string) => void
   setCalendarName: (v: string) => void
   setWeekendColor: (v: string) => void
   setUse24Hour: (v: boolean) => void
+  setHideTitleBar: (v: boolean) => void
 }
 
 const STORAGE_KEY = 'app-settings'
@@ -45,6 +47,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   const [calendarName, setCalendarNameState] = useState<string>(stored.calendarName ?? 'My Calendar')
   const [weekendColor, setWeekendColorState] = useState<string>(stored.weekendColor ?? '#dbeafe')
   const [use24Hour, setUse24HourState] = useState<boolean>(stored.use24Hour ?? false)
+  const [hideTitleBar, setHideTitleBarState] = useState<boolean>(stored.hideTitleBar ?? false)
 
   const setHighlightWeekends = (v: boolean) => {
     setHighlightWeekendsState(v)
@@ -70,11 +73,15 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     setUse24HourState(v)
     saveSettings({ use24Hour: v })
   }
+  const setHideTitleBar = (v: boolean) => {
+    setHideTitleBarState(v)
+    saveSettings({ hideTitleBar: v })
+  }
 
   return (
     <AppSettingsContext.Provider value={{
-      highlightWeekends, language, timezone, calendarName, weekendColor, use24Hour,
-      setHighlightWeekends, setLanguage, setTimezone, setCalendarName, setWeekendColor, setUse24Hour
+      highlightWeekends, language, timezone, calendarName, weekendColor, use24Hour, hideTitleBar,
+      setHighlightWeekends, setLanguage, setTimezone, setCalendarName, setWeekendColor, setUse24Hour, setHideTitleBar
     }}>
       {children}
     </AppSettingsContext.Provider>
