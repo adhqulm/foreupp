@@ -72,7 +72,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
   const { user, userProfile, updateProfile, updatePassword, updatePhotoURL } = useAuth()
   const { partner, joinSpace, leaveSpace } = useSpace()
-  const { highlightWeekends, setHighlightWeekends, language, setLanguage, timezone, setTimezone, calendarName, setCalendarName, weekendColor, setWeekendColor, use24Hour, setUse24Hour, hideTitleBar, setHideTitleBar } = useAppSettings()
+  const { highlightWeekends, setHighlightWeekends, language, setLanguage, timezone, setTimezone, calendarName, setCalendarName, weekendColor, setWeekendColor, use24Hour, setUse24Hour, hideTitleBar, setHideTitleBar, weekStartsOn, setWeekStartsOn } = useAppSettings()
   const t = { ...((UI as any)[language] ?? (UI as any)['en']) }
 
   const [displayName, setDisplayName] = useState(userProfile?.displayName ?? '')
@@ -238,7 +238,7 @@ export default function SettingsPage() {
                     ? 'bg-violet-600/25 text-text-primary border-violet-600/30'
                     : 'bg-surface border-border text-text-secondary hover:bg-surface-hover'
                 )}>
-                {m === 'light' ? '☀️ Light' : '🌙 Dark'}
+                {m === 'light' ? 'Light' : 'Dark'}
               </button>
             ))}
           </div>
@@ -312,6 +312,18 @@ export default function SettingsPage() {
                   <option key={c.timezone} value={c.timezone}>{c.city} ({c.timezone.replace('_', ' ')})</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">Week starts on</label>
+              <div className="flex gap-2">
+                {([{ label: 'Sunday', val: 0 }, { label: 'Monday', val: 1 }, { label: 'Saturday', val: 6 }] as { label: string; val: 0 | 1 | 6 }[]).map(opt => (
+                  <button key={opt.val} onClick={() => setWeekStartsOn(opt.val)}
+                    className={clsx('flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                      weekStartsOn === opt.val ? 'bg-violet-600/20 border-violet-600/40 text-text-primary' : 'border-border text-text-muted hover:border-violet-500/40')}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <label className="flex items-center justify-between cursor-pointer">
               <div>

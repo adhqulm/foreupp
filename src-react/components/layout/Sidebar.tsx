@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Calendar, BarChart2, Timer, Settings2, UserPlus, LogOut, ChevronUp, ChevronLeft, ChevronRight, X, LayoutGrid, Send, ArrowLeft } from 'lucide-react'
+import { Calendar, BarChart2, Timer, Hourglass, Settings2, UserPlus, LogOut, ChevronUp, ChevronLeft, ChevronRight, LayoutGrid, Send, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useSpace } from '../../context/SpaceContext'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -13,9 +13,10 @@ type NavEntry =
 const NAV_KEYS: NavEntry[] = [
   { to: '/calendar',   icon: Calendar,    key: 'calendar' },
   { to: '/trackers',   icon: BarChart2,   key: 'trackers' },
-  { to: '/countdowns', icon: Timer,       key: 'countdowns' },
+  { to: '/countdowns', icon: Hourglass,   key: 'countdowns' },
   { to: '/kanban',     icon: LayoutGrid,  key: 'kanban' },
-  { spacer: true },
+  { to: '/pomodoro',   icon: Timer,       key: 'pomodoro', label: 'Pomodoro' },
+{ spacer: true },
   { to: '/messenger',  icon: Send,        key: 'chat', label: 'Chat' },
 ]
 
@@ -27,7 +28,7 @@ function loadSavedAccounts(): SavedAccount[] {
 
 export default function Sidebar() {
   const { user, userProfile, signIn, signOut } = useAuth()
-  const { partner, members } = useSpace()
+  const { partner, members, unreadCounts } = useSpace()
   const navigate = useNavigate()
   const t = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
@@ -144,6 +145,7 @@ export default function Sidebar() {
             }
             const { to, icon: Icon, key, label: itemLabel } = item
             const label = itemLabel ?? (t[key] ?? key)
+            const totalUnread = key === 'chat' ? Object.values(unreadCounts).reduce((s, n) => s + n, 0) : 0
             return (
               <NavLink key={to} to={to}
                 className={({ isActive }) => clsx(
@@ -155,8 +157,20 @@ export default function Sidebar() {
                 )}
                 title={collapsed ? label : undefined}
               >
-                <Icon size={16} className="shrink-0" />
+                <div className="relative shrink-0">
+                  <Icon size={16} />
+                  {totalUnread > 0 && collapsed && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-violet-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </span>
+                  )}
+                </div>
                 {!collapsed && label}
+                {!collapsed && totalUnread > 0 && (
+                  <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-violet-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </span>
+                )}
               </NavLink>
             )
           })}
@@ -185,17 +199,23 @@ export default function Sidebar() {
             <div className="card p-2.5">
               <p className="text-xs text-text-muted mb-1.5 uppercase tracking-wider font-semibold">{t.sharedWith ?? 'Shared with'}</p>
               <div className="space-y-1.5">
-                {Object.values(members).filter(m => m.uid !== user?.uid).map(m => (
-                  <div key={m.uid} className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden shrink-0"
-                      style={{ backgroundColor: m.color }}>
-                      {m.photoURL
-                        ? <img src={m.photoURL} alt="" className="w-full h-full object-cover" />
-                        : m.displayName?.[0]?.toUpperCase() ?? '?'}
+                {Object.values(members).filter(m => m.uid !== user?.uid).map(m => {
+                  const online = m.lastSeen && (Date.now() - m.lastSeen) < 5 * 60 * 1000
+                  return (
+                    <div key={m.uid} className="flex items-center gap-2">
+                      <div className="relative shrink-0">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden"
+                          style={{ backgroundColor: m.color }}>
+                          {m.photoURL
+                            ? <img src={m.photoURL} alt="" className="w-full h-full object-cover" />
+                            : m.displayName?.[0]?.toUpperCase() ?? '?'}
+                        </div>
+                        <span className={clsx('absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-bg-secondary', online ? 'bg-green-500' : 'bg-text-muted/40')} />
+                      </div>
+                      <span className="text-sm text-text-primary truncate">{m.displayName}</span>
                     </div>
-                    <span className="text-sm text-text-primary truncate">{m.displayName}</span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           </div>

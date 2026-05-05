@@ -323,16 +323,39 @@ function InlineKanbanBoard({ board }: { board: KanbanBoard }) {
   return (
     <div>
       {/* Overall progress bar */}
-      {boardCards.length > 0 && (
-        <div className="px-4 py-2 border-b border-border/20 flex items-center gap-3">
-          <ProgressBar value={overallProgress} color={progressColor(overallProgress)} className="flex-1" />
-          <span className="text-xs font-semibold shrink-0" style={{ color: progressColor(overallProgress) }}>{overallProgress}%</span>
-        </div>
-      )}
+      <div className="px-4 py-2 border-b border-border/20 flex items-center gap-3">
+        <button
+          onClick={() => setShowAddCol(true)}
+          className="w-5 h-5 rounded-full flex items-center justify-center text-text-muted hover:text-violet-500 hover:bg-surface-hover transition-colors shrink-0"
+          title="Add column">
+          <Plus size={13} />
+        </button>
+        {boardCards.length > 0 ? (
+          <>
+            <ProgressBar value={overallProgress} color={progressColor(overallProgress)} className="flex-1" />
+            <span className="text-xs font-semibold shrink-0" style={{ color: progressColor(overallProgress) }}>{overallProgress}%</span>
+          </>
+        ) : (
+          <div className="flex-1" />
+        )}
+      </div>
 
       {/* Columns */}
       <div className="overflow-x-auto">
-        <div className="flex gap-3 p-4 items-start" style={{ minWidth: 'max-content' }}>
+        <div className="flex justify-center gap-3 p-4 items-start min-w-0" style={{ minWidth: 'fit-content', margin: '0 auto' }}>
+          {showAddCol && (
+            <div className="w-64 shrink-0">
+              <div className="bg-bg-secondary border border-border rounded-xl p-3">
+                <input autoFocus type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddColumn(); if (e.key === 'Escape') setShowAddCol(false) }}
+                  className="input text-sm mb-2" placeholder="Column name" />
+                <div className="flex gap-2">
+                  <button onClick={handleAddColumn} className="btn-primary text-xs py-1.5 px-3">Add</button>
+                  <button onClick={() => setShowAddCol(false)} className="btn-ghost text-xs py-1.5 px-3">Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
           {cols.map(col => {
             const cards = kanbanCards.filter(c => c.boardId === board.id && c.columnId === col.id).sort((a, b) => a.order - b.order)
             return (
@@ -347,25 +370,6 @@ function InlineKanbanBoard({ board }: { board: KanbanBoard }) {
                 onUpdateCol={(data) => updateKanbanColumn(col.id, data)} onDeleteCol={() => deleteKanbanColumn(col.id)} />
             )
           })}
-
-          <div className="w-64 shrink-0">
-            {showAddCol ? (
-              <div className="bg-bg-secondary border border-border rounded-xl p-3">
-                <input autoFocus type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAddColumn(); if (e.key === 'Escape') setShowAddCol(false) }}
-                  className="input text-sm mb-2" placeholder="Column name" />
-                <div className="flex gap-2">
-                  <button onClick={handleAddColumn} className="btn-primary text-xs py-1.5 px-3">Add</button>
-                  <button onClick={() => setShowAddCol(false)} className="btn-ghost text-xs py-1.5 px-3">Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => setShowAddCol(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-border hover:border-violet-500/50 text-text-muted hover:text-text-secondary transition-all text-sm">
-                <Plus size={15} /> Add column
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
@@ -829,10 +833,11 @@ function KanbanCardView({ card, boardColor, isDragging, isDragOver, onDragStart,
   onDragStart: () => void; onDragEnd: () => void; onDragOver: () => void; onDrop: () => void; onClick: () => void
 }) {
   const { members } = useSpace()
-  const duePast = card.dueDate ? isPast(parseISO(card.dueDate)) && !isToday(parseISO(card.dueDate)) : false
-  const dueToday = card.dueDate ? isToday(parseISO(card.dueDate)) : false
-  const assignee = card.assignedTo ? members[card.assignedTo] : null
   const progress = getCardProgress(card)
+  const isDone = progress === 100
+  const duePast = !isDone && (card.dueDate ? isPast(parseISO(card.dueDate)) && !isToday(parseISO(card.dueDate)) : false)
+  const dueToday = !isDone && (card.dueDate ? isToday(parseISO(card.dueDate)) : false)
+  const assignee = card.assignedTo ? members[card.assignedTo] : null
   const hasChecklist = card.checklist && card.checklist.length > 0
   const checklistDone = hasChecklist ? card.checklist!.filter(i => i.done).length : 0
   const accentColor = card.color ?? boardColor
@@ -1042,7 +1047,8 @@ function KanbanCardDetailModal({ card, boardColor, onClose, onUpdate, onDelete }
             <div className="flex flex-wrap gap-3 text-xs text-text-muted">
               {card.dueDate && (
                 <span className={clsx('flex items-center gap-1 rounded px-2 py-1',
-                  isPast(parseISO(card.dueDate)) && !isToday(parseISO(card.dueDate)) ? 'bg-red-500/15 text-red-400'
+                  cardProgress === 100 ? 'bg-surface-hover'
+                  : isPast(parseISO(card.dueDate)) && !isToday(parseISO(card.dueDate)) ? 'bg-red-500/15 text-red-400'
                   : isToday(parseISO(card.dueDate)) ? 'bg-amber-500/15 text-amber-400'
                   : 'bg-surface-hover')}>
                   <Calendar size={11} /> {format(parseISO(card.dueDate), 'MMM d, yyyy')}

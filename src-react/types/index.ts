@@ -65,6 +65,8 @@ export interface Tracker {
   bgColor?: string
   type: 'checkbox' | 'number' | 'rating' | 'text'
   unit?: string // for number type (e.g. "glasses", "km")
+  goal?: number // for number type — minimum value to count as done
+  streakEnabled?: boolean // defaults to true when absent
   maxRating?: number // for rating type
   createdBy: string
   spaceId: string
@@ -178,6 +180,30 @@ export interface Message {
   forwardedFrom?: string  // original message id if forwarded
 }
 
+export interface SpreadsheetCellData {
+  raw: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  textColor?: string
+  bgColor?: string
+  align?: 'left' | 'center' | 'right'
+  format?: 'general' | 'number' | 'currency' | 'percent' | 'text'
+  decimals?: number
+}
+
+export interface Spreadsheet {
+  id: string
+  name: string
+  spaceId: string
+  createdBy: string
+  createdAt: number
+  rowCount: number
+  colCount: number
+  cells: Record<string, SpreadsheetCellData>
+  colWidths?: Record<string, number>
+}
+
 export interface Conversation {
   id: string
   spaceId: string
@@ -186,6 +212,9 @@ export interface Conversation {
   name?: string
   lastMessageAt?: number
   lastMessageText?: string
+  lastMessageSenderId?: string
+  lastMessageReadBy?: string[]
+  unreadCount?: Record<string, number>
   createdBy?: string
   photoURL?: string
   pinnedBy?: string[]   // uids who pinned this chat

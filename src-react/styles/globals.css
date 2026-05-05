@@ -2,30 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Default theme: warm beige, light mode, hue=30 */
+/* Default theme: clean white, light mode */
 :root {
-  --bg-primary:      30 28% 97%;
-  --bg-secondary:    30 24% 93%;
-  --bg-tertiary:     30 20% 88%;
-  --bg-calendar:     30 12% 99%;
-  --surface:         30 22% 91%;
-  --surface-hover:   30 22% 86%;
-  --surface-active:  30 22% 81%;
-  --border:          30 30% 68%;
-  --border-subtle:   30 24% 82%;
-  --text-primary:    30 45% 10%;
-  --text-secondary:  30 38% 35%;
-  --text-muted:      30 28% 52%;
-  --accent-50:       30 42% 96%;
-  --accent-100:      30 44% 90%;
-  --accent-200:      30 46% 78%;
-  --accent-300:      30 48% 65%;
-  --accent-400:      30 50% 53%;
-  --accent-500:      30 53% 43%;
-  --accent-600:      30 55% 34%;
-  --accent-700:      30 55% 27%;
-  --accent-800:      30 52% 20%;
-  --accent-900:      30 48% 14%;
+  --bg-primary:      0 0% 100%;
+  --bg-secondary:    0 0% 96%;
+  --bg-tertiary:     0 0% 91%;
+  --bg-calendar:     0 0% 100%;
+  --surface:         0 0% 94%;
+  --surface-hover:   0 0% 89%;
+  --surface-active:  0 0% 84%;
+  --border:          0 0% 82%;
+  --border-subtle:   0 0% 90%;
+  --text-primary:    0 0% 9%;
+  --text-secondary:  0 0% 35%;
+  --text-muted:      0 0% 52%;
+  --accent-50:       270 50% 97%;
+  --accent-100:      270 50% 92%;
+  --accent-200:      270 50% 82%;
+  --accent-300:      270 50% 68%;
+  --accent-400:      270 50% 56%;
+  --accent-500:      270 53% 47%;
+  --accent-600:      270 55% 38%;
+  --accent-700:      270 55% 30%;
+  --accent-800:      270 52% 22%;
+  --accent-900:      270 48% 15%;
 }
 
 @layer base {
@@ -98,3 +98,4 @@
     @apply bg-bg-primary border border-border rounded-2xl shadow-2xl animate-scale-in w-full;
   }
 }
+

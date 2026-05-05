@@ -50,6 +50,7 @@ interface SpaceContextValue {
   conversations: Conversation[]
   activeConversationId: string | null
   setActiveConversationId: (id: string | null) => void
+  unreadCounts: Record<string, number>
   getOrCreateDM: (partnerUid: string) => Promise<string>
   createGroup: (name: string, memberIds: string[]) => Promise<string>
   sendMessage: (conversationId: string, text: string, attachments?: MessageAttachment[], replyTo?: { id: string; text: string; senderName: string }) => Promise<void>
@@ -99,6 +100,9 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  const prevConvLastAt = useRef<Record<string, number>>({})
+  const convInitialised = useRef(false)
 
   // Resolve space and partner
   useEffect(() => {
@@ -272,6 +276,50 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       }
     })
   }, [spaceId, user, activeConversationId])
+
+  // Client-side unread count tracking — use refs to avoid stale closures
+  const activeConvIdRef = useRef<string | null>(null)
+  const userUidRef = useRef<string | undefined>(undefined)
+  useEffect(() => { activeConvIdRef.current = activeConversationId }, [activeConversationId])
+  useEffect(() => { userUidRef.current = user?.uid }, [user])
+
+  useEffect(() => {
+    if (conversations.length === 0) return
+    if (!convInitialised.current) {
+      conversations.forEach(c => { prevConvLastAt.current[c.id] = c.lastMessageAt ?? 0 })
+      convInitialised.current = true
+      return
+    }
+    const increments: Record<string, number> = {}
+    conversations.forEach(c => {
+      const lastAt = c.lastMessageAt ?? 0
+      const prevAt = prevConvLastAt.current[c.id] ?? 0
+      const senderIsUs = c.lastMessageSenderId === userUidRef.current
+      if (lastAt > prevAt && c.id !== activeConvIdRef.current && !senderIsUs) {
+        increments[c.id] = 1
+      }
+      prevConvLastAt.current[c.id] = lastAt
+    })
+    if (Object.keys(increments).length > 0) {
+      setUnreadCounts(prev => {
+        const next = { ...prev }
+        Object.keys(increments).forEach(id => { next[id] = (next[id] ?? 0) + 1 })
+        return next
+      })
+    }
+  }, [conversations])
+
+  // Clear unread count when a conversation is opened
+  useEffect(() => {
+    if (activeConversationId) {
+      setUnreadCounts(prev => {
+        if (!(activeConversationId in prev)) return prev
+        const next = { ...prev }
+        delete next[activeConversationId]
+        return next
+      })
+    }
+  }, [activeConversationId])
 
   const createSpace = async () => {
     if (!user) return
@@ -452,9 +500,15 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       where('createdBy', '==', user.uid)
     )
     const snap = await getDocs(q)
+    const isEmpty = entry.value === 0 || entry.value === null || entry.value === undefined
     if (!snap.empty) {
-      await updateDoc(doc(db, 'trackerEntries', snap.docs[0].id), { value: entry.value, note: entry.note ?? null })
-    } else {
+      if (isEmpty) {
+        const { deleteDoc } = await import('firebase/firestore')
+        await deleteDoc(doc(db, 'trackerEntries', snap.docs[0].id))
+      } else {
+        await updateDoc(doc(db, 'trackerEntries', snap.docs[0].id), { value: entry.value, note: entry.note ?? null })
+      }
+    } else if (!isEmpty) {
       await addDoc(collection(db, 'trackerEntries'), {
         ...entry,
         spaceId,
@@ -566,7 +620,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     })
     await updateDoc(doc(db, 'conversations', conversationId), {
       lastMessageAt: now,
-      lastMessageText: text.slice(0, 60),
+      lastMessageText: (text || (attachments && attachments.length > 0 ? '📎 Attachment' : '')).slice(0, 60),
+      lastMessageSenderId: user.uid,
     })
   }
 
@@ -719,11 +774,11 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       addKanbanCard, updateKanbanCard, deleteKanbanCard,
       joinSpace, leaveSpace, createSpace,
       messages, partnerTyping,
-      conversations, activeConversationId, setActiveConversationId,
+      conversations, activeConversationId, setActiveConversationId, unreadCounts,
       getOrCreateDM, createGroup,
       sendMessage, deleteMessage, reactToMessage, markMessagesRead, setTyping,
       pinMessage, forwardMessage, getMessagesForConversation, pinConversation, muteConversation, markConversationUnread, clearHistory,
-      updateConversation, leaveGroup
+      updateConversation, leaveGroup,
     }}>
       {children}
     </SpaceContext.Provider>

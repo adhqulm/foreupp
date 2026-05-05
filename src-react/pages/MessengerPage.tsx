@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import {
   Send, Paperclip, X, Check, CheckCheck, Trash2, Image, Users, SquarePen,
   Bell, BellOff, LogOut, UserPlus, MoreHorizontal, ChevronLeft, Link, FileText, Camera,
-  Video, Phone, Pin, Reply, Forward, CheckSquare, ChevronRight
+  Video, Phone, Pin, Reply, Forward, CheckSquare, ChevronRight, ChevronDown
 } from 'lucide-react'
 import type { Message, MessageAttachment, Conversation } from '../types'
 import clsx from 'clsx'
@@ -479,7 +479,7 @@ function AttachmentItem({ att, isOwn, imageOnly }: { att: MessageAttachment; isO
       <img
         src={att.url}
         alt={att.name}
-        className={clsx('cursor-pointer object-cover', imageOnly ? 'max-w-[260px] w-full block' : 'max-w-[220px] rounded-xl')}
+        className={clsx('cursor-pointer object-cover', imageOnly ? 'max-w-[260px] w-full block' : 'max-w-[220px] block')}
         onClick={e => { e.stopPropagation(); setLightbox(true) }}
       />
     </>
@@ -509,6 +509,7 @@ interface MessageBubbleProps {
   showAvatar: boolean
   partnerUid: string | null
   currentUid: string
+  convMemberIds: string[]
   members: Record<string, { uid: string; displayName?: string; color?: string; photoURL?: string }>
   selectMode: boolean
   selected: boolean
@@ -519,7 +520,7 @@ interface MessageBubbleProps {
   onReact: (id: string, emoji: string) => void
 }
 
-function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, partnerUid, currentUid, members, selectMode, selected, highlighted, onContextMenu, onToggleSelect, onDelete, onReact }: MessageBubbleProps) {
+function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, partnerUid, currentUid, convMemberIds, members, selectMode, selected, highlighted, onContextMenu, onToggleSelect, onDelete, onReact }: MessageBubbleProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [showActions, setShowActions] = useState(false)
 
@@ -529,7 +530,9 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
     reactionMap[emoji].push(uid)
   })
 
-  const isRead = partnerUid ? msg.readBy.includes(partnerUid) : false
+  const isRead = convMemberIds.length > 0
+    ? convMemberIds.filter(id => id !== msg.senderId).every(id => msg.readBy.includes(id))
+    : (partnerUid ? msg.readBy.includes(partnerUid) : false)
 
   return (
     <div id={`msg-${msg.id}`} className={clsx('flex items-end gap-2 group rounded-xl transition-colors duration-300', isOwn ? 'flex-row-reverse' : 'flex-row', selectMode && 'cursor-pointer', highlighted && 'bg-violet-500/15')}
@@ -580,7 +583,7 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
             return (
               <div
                 className={clsx(
-                  'rounded-2xl text-sm leading-relaxed overflow-hidden',
+                  'rounded-2xl text-sm leading-relaxed overflow-hidden select-text',
                   noBubblePad ? '' : 'px-3 py-2',
                   isOwn
                     ? 'bg-violet-600 text-white rounded-br-sm'
@@ -607,7 +610,7 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
                 )}
 
                 {/* Caption text — always padded when image is present */}
-                {msg.text && <span className={hasImage ? 'px-3 py-2 block' : ''}>{msg.text}</span>}
+                {msg.text && <span className={hasImage ? 'px-2.5 py-1 block' : ''}>{msg.text}</span>}
               </div>
             )
           })()}
@@ -795,13 +798,24 @@ interface ConvItemProps {
   isActive: boolean
   members: Record<string, { uid: string; displayName: string; color: string; photoURL?: string }>
   currentUid: string
+  unreadCount: number
   onClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }
 
-function ConvItem({ conv, isActive, members, currentUid, onClick, onContextMenu }: ConvItemProps) {
+function ConvItem({ conv, isActive, members, currentUid, unreadCount, onClick, onContextMenu }: ConvItemProps) {
   const isPinned = conv.pinnedBy?.includes(currentUid)
-  const isUnread = conv.unreadFor?.includes(currentUid)
+  const isOwnLastMsg = conv.lastMessageSenderId === currentUid
+  const otherMembers = conv.memberIds.filter(id => id !== currentUid)
+  const lastMsgAllRead = isOwnLastMsg && otherMembers.length > 0 && otherMembers.every(id => conv.lastMessageReadBy?.includes(id))
+
+  function ReadIndicator() {
+    if (!isOwnLastMsg) return null
+    return lastMsgAllRead
+      ? <CheckCheck size={13} className="text-violet-400 shrink-0" />
+      : <Check size={13} className="text-text-muted shrink-0" />
+  }
+
   if (conv.type === 'dm') {
     const partnerUid = conv.memberIds.find(id => id !== currentUid)
     const partnerProfile = partnerUid ? members[partnerUid] : null
@@ -830,8 +844,15 @@ function ConvItem({ conv, isActive, members, currentUid, onClick, onContextMenu 
             </div>
           </div>
           <div className="flex items-center justify-between gap-1">
-            <p className="text-xs text-text-muted truncate">{conv.lastMessageText || 'No messages yet'}</p>
-            {isUnread && <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />}
+            <p className="text-xs text-text-muted truncate flex-1 min-w-0">{conv.lastMessageText || 'No messages yet'}</p>
+            <div className="flex items-center gap-1 shrink-0">
+              <ReadIndicator />
+              {unreadCount > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-violet-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </button>
@@ -860,8 +881,15 @@ function ConvItem({ conv, isActive, members, currentUid, onClick, onContextMenu 
           </div>
         </div>
         <div className="flex items-center justify-between gap-1">
-          <p className="text-xs text-text-muted truncate">{conv.lastMessageText || 'No messages yet'}</p>
-          {isUnread && <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />}
+          <p className="text-xs text-text-muted truncate flex-1 min-w-0">{conv.lastMessageText || 'No messages yet'}</p>
+          <div className="flex items-center gap-1 shrink-0">
+            <ReadIndicator />
+            {unreadCount > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-violet-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </button>
@@ -1305,14 +1333,18 @@ function GroupInfoPanel({
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setEditingName(true)}
-              className="flex items-center gap-1.5 group/name"
-              title="Edit group name"
-            >
-              <span className="text-base font-semibold text-text-primary">{conv.name ?? 'Group'}</span>
-              <SquarePen size={13} className="text-text-muted opacity-0 group-hover/name:opacity-100 transition-opacity" />
-            </button>
+            <div className="relative flex items-center justify-center group/name">
+              <button
+                onClick={() => setEditingName(true)}
+                className="flex items-center gap-1.5"
+                title="Edit group name"
+              >
+                <span className="text-base font-semibold text-text-primary">{conv.name ?? 'Group'}</span>
+              </button>
+              <button onClick={() => setEditingName(true)} className="absolute -right-5 opacity-0 group-hover/name:opacity-100 transition-opacity" title="Edit group name">
+                <SquarePen size={13} className="text-text-muted" />
+              </button>
+            </div>
           )}
 
           <span className="text-xs text-text-muted">{conv.memberIds.length} members</span>
@@ -1630,6 +1662,10 @@ function LeaveGroupConfirmModal({
   )
 }
 
+// Persists across page navigations (component unmounts/remounts)
+let _lastConvId: string | null = null
+let _lastScrollTop: number | null = null
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function MessengerPage() {
@@ -1640,7 +1676,7 @@ export default function MessengerPage() {
     getOrCreateDM, createGroup,
     updateConversation, leaveGroup,
     pinMessage, forwardMessage, pinConversation, muteConversation, markConversationUnread, clearHistory,
-    getMessagesForConversation
+    getMessagesForConversation, unreadCounts
   } = useSpace()
   const { user } = useAuth()
 
@@ -1675,6 +1711,7 @@ export default function MessengerPage() {
   const [showPinnedList, setShowPinnedList] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [showScrollDown, setShowScrollDown] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const typingThrottleRef = useRef<number>(0)
@@ -1725,11 +1762,35 @@ export default function MessengerPage() {
     return el.scrollHeight - el.scrollTop - el.clientHeight < 100
   }, [])
 
+  const prevConvIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (isNearBottom()) {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    const el = scrollRef.current
+    if (!el) return
+    const convChanged = activeConversationId !== prevConvIdRef.current
+    prevConvIdRef.current = activeConversationId ?? null
+    if (convChanged) {
+      // Same conv as last time the page was open — restore scroll position
+      if (activeConversationId === _lastConvId && _lastScrollTop !== null) {
+        el.scrollTop = _lastScrollTop
+      } else {
+        el.scrollTop = el.scrollHeight
+      }
+      _lastConvId = activeConversationId ?? null
+      _lastScrollTop = null
+    } else if (isNearBottom()) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     }
-  }, [messages, partnerTyping])
+  }, [messages, partnerTyping, activeConversationId])
+
+  // Save scroll position when navigating away
+  useEffect(() => {
+    return () => {
+      if (scrollRef.current && activeConversationId) {
+        _lastConvId = activeConversationId
+        _lastScrollTop = scrollRef.current.scrollTop
+      }
+    }
+  }, [activeConversationId])
 
   // Mark unread messages as read
   useEffect(() => {
@@ -1758,6 +1819,18 @@ export default function MessengerPage() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault()
+      const ta = e.currentTarget
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      const newText = text.slice(0, start) + '\n' + text.slice(end)
+      setText(newText)
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + 1
+      })
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
@@ -1932,7 +2005,7 @@ export default function MessengerPage() {
   const canSend = !!activeConversationId && (text.trim().length > 0 || pendingFiles.length > 0) && !uploading
 
   return (
-    <div className="h-full flex flex-col bg-bg-primary">
+    <div className="h-full flex flex-col bg-bg-primary overflow-hidden">
       <div className="flex-1 flex overflow-hidden min-h-0">
 
         {/* ── Left panel: conversation list ── */}
@@ -1987,9 +2060,9 @@ export default function MessengerPage() {
                 isActive={conv.id === activeConversationId}
                 members={members}
                 currentUid={uid}
+                unreadCount={unreadCounts[conv.id] ?? 0}
                 onClick={() => {
                   setActiveConversationId(conv.id)
-                  // clear unread dot when opening — only call if currently marked unread
                   if (conv.unreadFor?.includes(uid)) {
                     updateConversation(conv.id, { unreadFor: conv.unreadFor.filter(u => u !== uid) })
                   }
@@ -2145,7 +2218,13 @@ export default function MessengerPage() {
               })()}
 
               {/* Messages area */}
-              <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
+              <div className="flex-1 relative min-h-0 overflow-hidden">
+              <div ref={scrollRef} className="h-full overflow-y-auto overflow-x-hidden"
+                onScroll={() => {
+                  const el = scrollRef.current
+                  if (!el) return
+                  setShowScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 120)
+                }}>
                 <div className="flex flex-col justify-end min-h-full px-4 py-4 space-y-1.5">
                   {visibleMessages.length === 0 && (
                     <div className="flex items-center justify-center py-8">
@@ -2178,6 +2257,7 @@ export default function MessengerPage() {
                         showAvatar={showAvatar}
                         partnerUid={activeHeader?.partnerUid ?? null}
                         currentUid={uid}
+                        convMemberIds={activeConversation?.memberIds ?? []}
                         members={members}
                         selectMode={selectMode}
                         selected={selectedIds.has(msg.id)}
@@ -2192,6 +2272,14 @@ export default function MessengerPage() {
 
                   {partnerTyping && <TypingIndicator />}
                 </div>
+              </div>
+              {showScrollDown && (
+                <button
+                  onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })}
+                  className="absolute bottom-4 right-4 z-10 w-8 h-8 rounded-full bg-bg-secondary border border-border shadow-md flex items-center justify-center text-text-muted hover:text-text-primary transition-colors">
+                  <ChevronDown size={16} />
+                </button>
+              )}
               </div>
 
               {/* Pending file previews */}

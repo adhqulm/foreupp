@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { format, addDays, startOfWeek, subWeeks, addWeeks, isSameWeek } from 'date-fns'
 import { Plus, X, Trash2, ChevronLeft, ChevronRight, Flame, Pencil, LayoutGrid, AlignJustify } from 'lucide-react'
 import { useSpace } from '../context/SpaceContext'
@@ -9,8 +9,7 @@ import ColorPresetPicker from '../components/ColorPresetPicker'
 import clsx from 'clsx'
 
 const TRACKER_EMOJIS = ['✅', '💧', '🏃', '💊', '📚', '🧘', '🍎', '😴', '🎯', '💪', '🌟', '🧠', '✍️', '🎵']
-const TODAY = format(new Date(), 'yyyy-MM-dd')
-const isFuture = (date: string) => date > TODAY
+const isFuture = (date: string, today: string) => date > today
 
 function getWeekDays(weekStart: Date) {
   return Array.from({ length: 7 }, (_, i) => {
@@ -19,20 +18,22 @@ function getWeekDays(weekStart: Date) {
   })
 }
 
-function calcStreak(tracker: Tracker, entries: TrackerEntry[], userId: string): number {
+function calcStreak(tracker: Tracker, entries: TrackerEntry[], userId: string, today: string): number {
   const isDone = (date: string) => {
     const entry = entries.find(e => e.trackerId === tracker.id && e.date === date && e.createdBy === userId)
     if (!entry) return false
     if (tracker.type === 'checkbox') return !!entry.value
-    if (tracker.type === 'number') return (entry.value as number) > 0
+    if (tracker.type === 'number') {
+      const val = entry.value as number
+      return tracker.goal ? val >= tracker.goal : val > 0
+    }
     if (tracker.type === 'rating') return (entry.value as number) > 0
     return false
   }
 
   let streak = 0
   let cursor = new Date()
-  // If today isn't done yet, start counting from yesterday
-  if (!isDone(TODAY)) cursor = addDays(cursor, -1)
+  if (!isDone(today)) cursor = addDays(cursor, -1)
 
   while (true) {
     const d = format(cursor, 'yyyy-MM-dd')
@@ -49,8 +50,30 @@ export default function TrackersPage() {
   const t = useTranslation()
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing] = useState<Tracker | null>(null)
+  const [today, setToday] = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
-  const [viewMode, setViewMode] = useState<'individual' | 'full'>('individual')
+
+  // Advance "today" and weekStart at midnight without needing a reload
+  useEffect(() => {
+    const msUntilMidnight = () => {
+      const now = new Date()
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime()
+    }
+    let timer: ReturnType<typeof setTimeout>
+    const schedule = () => {
+      timer = setTimeout(() => {
+        const newToday = format(new Date(), 'yyyy-MM-dd')
+        setToday(newToday)
+        setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))
+        schedule()
+      }, msUntilMidnight())
+    }
+    schedule()
+    return () => clearTimeout(timer)
+  }, [])
+  const [viewMode, setViewMode] = useState<'individual' | 'full'>(
+    () => (localStorage.getItem('trackers-view-mode') as 'individual' | 'full') ?? 'individual'
+  )
 
   const weekDays = getWeekDays(weekStart)
   const isCurrentWeek = isSameWeek(weekStart, new Date(), { weekStartsOn: 1 })
@@ -96,18 +119,18 @@ export default function TrackersPage() {
             </span>
             <div className="flex bg-bg-secondary border border-border rounded-lg p-0.5">
               <button
-                onClick={() => setViewMode('individual')}
-                title="Individual view"
-                className={clsx('p-1.5 rounded-md transition-all', viewMode === 'individual' ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary')}
-              >
-                <AlignJustify size={13} />
-              </button>
-              <button
-                onClick={() => setViewMode('full')}
+                onClick={() => { setViewMode('full'); localStorage.setItem('trackers-view-mode', 'full') }}
                 title="Full grid view"
                 className={clsx('p-1.5 rounded-md transition-all', viewMode === 'full' ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary')}
               >
                 <LayoutGrid size={13} />
+              </button>
+              <button
+                onClick={() => { setViewMode('individual'); localStorage.setItem('trackers-view-mode', 'individual') }}
+                title="Individual view"
+                className={clsx('p-1.5 rounded-md transition-all', viewMode === 'individual' ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-secondary')}
+              >
+                <AlignJustify size={13} />
               </button>
             </div>
           </div>
@@ -130,7 +153,9 @@ export default function TrackersPage() {
         ) : viewMode === 'full' ? (
           <FullGridView
             trackers={trackers}
+            trackerEntries={trackerEntries}
             weekDays={weekDays}
+            today={today}
             userId={user?.uid ?? ''}
             getEntry={(trackerId, date, uid) => getEntry(trackerId, date, uid)}
             onCheck={(tracker, date) => handleCheck(tracker, date)}
@@ -145,7 +170,8 @@ export default function TrackersPage() {
                 key={tracker.id}
                 tracker={tracker}
                 weekDays={weekDays}
-                streak={calcStreak(tracker, trackerEntries, user?.uid ?? '')}
+                today={today}
+                streak={calcStreak(tracker, trackerEntries, user?.uid ?? '', today)}
                 getEntry={(date, uid) => getEntry(tracker.id, date, uid)}
                 userId={user?.uid ?? ''}
                 onCheck={(date) => handleCheck(tracker, date)}
@@ -174,9 +200,11 @@ export default function TrackersPage() {
 
 // ─── Full Grid View ───────────────────────────────────────────────────────────
 
-function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onNumber, onRating, onEdit }: {
+function FullGridView({ trackers, trackerEntries, weekDays, today, userId, getEntry, onCheck, onNumber, onRating, onEdit }: {
   trackers: Tracker[]
+  trackerEntries: TrackerEntry[]
   weekDays: { date: string; label: string; day: string; month: string }[]
+  today: string
   userId: string
   getEntry: (trackerId: string, date: string, uid: string) => TrackerEntry | undefined
   onCheck: (tracker: Tracker, date: string) => void
@@ -198,12 +226,12 @@ function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onNumber,
       <Row
         left={<span />}
         right={weekDays.map(({ date, label, day }) => {
-          const today = date === TODAY
+          const isToday = date === today
           return (
             <div key={date} className="flex flex-col items-center justify-end pb-2">
-              <span className={clsx('text-xs font-bold leading-none', today ? 'text-violet-400' : 'text-text-secondary')}>{label[0]}</span>
-              <div className={clsx('w-5 h-5 rounded-full flex items-center justify-center mt-0.5', today && 'bg-violet-500/20')}>
-                <span className={clsx('text-[10px] leading-none', today ? 'text-violet-400 font-semibold' : 'text-text-muted')}>{day}</span>
+              <span className={clsx('text-xs font-bold leading-none', isToday ? 'text-violet-400' : 'text-text-secondary')}>{label[0]}</span>
+              <div className={clsx('w-5 h-5 rounded-full flex items-center justify-center mt-0.5', isToday && 'bg-violet-500/20')}>
+                <span className={clsx('text-[10px] leading-none', isToday ? 'text-violet-400 font-semibold' : 'text-text-muted')}>{day}</span>
               </div>
             </div>
           )
@@ -218,7 +246,20 @@ function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onNumber,
           left={
             <>
               <span className="text-2xl shrink-0 leading-none">{tracker.emoji ?? '📊'}</span>
-              <span className="font-semibold text-text-primary text-sm truncate">{tracker.name}</span>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-semibold text-text-primary text-sm truncate">{tracker.name}</span>
+                  {tracker.streakEnabled !== false && (() => {
+                    const streak = calcStreak(tracker, trackerEntries, userId, today)
+                    return streak > 0
+                      ? <span className="text-xs text-orange-400 flex items-center gap-0.5 shrink-0"><Flame size={10} />{streak}d</span>
+                      : null
+                  })()}
+                </div>
+                {tracker.description && (
+                  <span className="text-xs text-text-muted truncate mt-1">{tracker.description}</span>
+                )}
+              </div>
               <button
                 onClick={() => onEdit(tracker)}
                 className="btn-ghost p-1 text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-auto"
@@ -229,11 +270,12 @@ function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onNumber,
           }
           right={weekDays.map(({ date }) => {
             const entry = getEntry(tracker.id, date, userId)
-            const future = isFuture(date)
-            const today = date === TODAY
+            const future = isFuture(date, today)
+            const isToday = date === today
+            const numVal = entry?.value as number ?? 0
             const filled = tracker.type === 'checkbox'
               ? !!(entry?.value)
-              : (entry?.value as number ?? 0) > 0
+              : tracker.goal ? numVal >= tracker.goal : numVal > 0
 
             return (
               <div key={date} className="flex items-center justify-center py-2.5">
@@ -258,7 +300,7 @@ function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onNumber,
                 {tracker.type === 'number' && (
                   <input
                     type="number"
-                    defaultValue={(entry?.value as number) ?? ''}
+                    defaultValue={(entry?.value as number) || ''}
                     onBlur={e => { const v = parseFloat(e.target.value); onNumber(tracker, date, isNaN(v) ? 0 : v) }}
                     disabled={future}
                     className={clsx('w-10 h-8 text-center text-xs input px-1 py-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none', future && 'opacity-20 cursor-not-allowed')}
@@ -286,9 +328,10 @@ function FullGridView({ trackers, weekDays, userId, getEntry, onCheck, onNumber,
 
 // ─── Individual Row ───────────────────────────────────────────────────────────
 
-function TrackerRow({ tracker, weekDays, streak, getEntry, onCheck, onNumber, onRating, onEdit, onDelete, userId }: {
+function TrackerRow({ tracker, weekDays, today, streak, getEntry, onCheck, onNumber, onRating, onEdit, onDelete, userId }: {
   tracker: Tracker
   weekDays: { date: string; label: string; day: string; month: string }[]
+  today: string
   streak: number
   getEntry: (date: string, uid: string) => TrackerEntry | undefined
   userId: string
@@ -315,15 +358,17 @@ function TrackerRow({ tracker, weekDays, streak, getEntry, onCheck, onNumber, on
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-text-primary text-sm">{tracker.name}</p>
             <div className="flex items-center gap-2 mt-0.5">
-              {streak > 0 && (
-                <div className="flex items-center gap-1 text-xs font-semibold"
-                  style={{ color: tracker.color }}>
+              {tracker.streakEnabled !== false && streak > 0 && (
+                <div className="flex items-center gap-1 text-xs font-semibold text-orange-400">
                   <Flame size={11} />
                   {streak} {t.dayStreak ?? 'day streak'}
                 </div>
               )}
-              {streak === 0 && (
+              {tracker.streakEnabled !== false && streak === 0 && (
                 <p className="text-xs text-text-muted">{t.noStreakYet ?? 'No streak yet'}</p>
+              )}
+              {tracker.type === 'number' && tracker.goal && (
+                <p className="text-xs text-text-muted">Goal: {tracker.goal}{tracker.unit ? ' ' + tracker.unit : ''}</p>
               )}
             </div>
           </div>
@@ -344,13 +389,13 @@ function TrackerRow({ tracker, weekDays, streak, getEntry, onCheck, onNumber, on
       <div className="grid grid-cols-7 gap-1">
         {weekDays.map(({ date, label, day }) => {
           const myEntry = getEntry(date, userId)
-          const today = date === TODAY
-          const future = isFuture(date)
+          const isToday = date === today
+          const future = isFuture(date, today)
 
           return (
             <div key={date} className="flex flex-col items-center gap-1">
-              <p className={clsx('text-xs font-medium', today ? 'text-violet-400' : 'text-text-muted')}>{label}</p>
-              <p className={clsx('text-xs', today ? 'text-violet-300' : 'text-text-muted')}>{day}</p>
+              <p className={clsx('text-xs font-medium', isToday ? 'text-violet-400' : 'text-text-muted')}>{label}</p>
+              <p className={clsx('text-xs', isToday ? 'text-violet-300' : 'text-text-muted')}>{day}</p>
 
               {tracker.type === 'checkbox' && (
                 <button
@@ -419,6 +464,8 @@ function CreateTrackerModal({ existing, onClose, onAdd, onUpdate }: {
   const [showBgColorPicker, setShowBgColorPicker] = useState(false)
   const [type, setType] = useState<Tracker['type']>(existing?.type ?? 'checkbox')
   const [unit, setUnit] = useState(existing?.unit ?? '')
+  const [goal, setGoal] = useState<number | ''>(existing?.goal ?? '')
+  const [streakEnabled, setStreakEnabled] = useState(existing?.streakEnabled !== false)
   const [maxRating, setMaxRating] = useState(existing?.maxRating ?? 5)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -428,8 +475,10 @@ function CreateTrackerModal({ existing, onClose, onAdd, onUpdate }: {
     if (!name.trim()) return
     setLoading(true); setError('')
     try {
-      const payload: any = { name: name.trim(), description, emoji, color, bgColor, type, isShared: true }
+      const payload: any = { name: name.trim(), description, emoji, color, bgColor, type, isShared: true, streakEnabled }
       if (type === 'number' && unit) payload.unit = unit
+      if (type === 'number' && goal !== '') payload.goal = Number(goal)
+      else payload.goal = null
       if (type === 'rating') payload.maxRating = maxRating
       if (existing && onUpdate) await onUpdate(payload)
       else await onAdd(payload)
@@ -469,7 +518,24 @@ function CreateTrackerModal({ existing, onClose, onAdd, onUpdate }: {
             </div>
           </div>
           {type === 'number' && (
-            <input type="text" value={unit} onChange={e => setUnit(e.target.value)} className="input" placeholder="Unit (e.g. glasses, km, pages)" />
+            <div className="space-y-2">
+              <input type="text" value={unit} onChange={e => setUnit(e.target.value)} className="input" placeholder="Unit (e.g. glasses, km, pages)" />
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={goal}
+                  onChange={e => setGoal(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="input w-24"
+                  placeholder="Goal"
+                  min={1}
+                />
+                <span className="text-xs text-text-muted flex-1">
+                  {goal !== ''
+                    ? streakEnabled ? `Streak requires ≥ ${goal}${unit ? ' ' + unit : ''} per day` : `Goal: ${goal}${unit ? ' ' + unit : ''} per day`
+                    : 'Daily goal (optional)'}
+                </span>
+              </div>
+            </div>
           )}
           {type === 'rating' && (
             <div>
@@ -479,6 +545,19 @@ function CreateTrackerModal({ existing, onClose, onAdd, onUpdate }: {
               </select>
             </div>
           )}
+          <label className="flex items-center justify-between cursor-pointer select-none">
+            <div>
+              <p className="text-sm font-medium text-text-primary">Track streak</p>
+              <p className="text-xs text-text-muted">Show consecutive day count</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStreakEnabled(v => !v)}
+              className={clsx('w-10 h-6 rounded-full transition-colors relative shrink-0', streakEnabled ? 'bg-violet-600' : 'bg-border')}
+            >
+              <span className={clsx('absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all', streakEnabled ? 'left-[22px]' : 'left-[4px]')} />
+            </button>
+          </label>
           <div>
             <button type="button" onClick={() => setShowColorPicker(v => !v)}
               className="flex items-center gap-1 text-xs font-medium text-text-secondary mb-2 hover:text-text-primary transition-colors">

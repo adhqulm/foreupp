@@ -14,6 +14,7 @@ import OnboardingPage from './pages/OnboardingPage'
 import SettingsPage from './pages/SettingsPage'
 import KanbanPage from './pages/KanbanPage'
 import MessengerPage from './pages/MessengerPage'
+import PomodoroPage from './pages/PomodoroPage'
 
 function PrivateRoute({ children, requireSpace = true }: { children: React.ReactNode; requireSpace?: boolean }) {
   const { user, userProfile, loading } = useAuth()
@@ -77,7 +78,8 @@ export default function App() {
             <Route path="countdowns" element={<CountdownsPage />} />
             <Route path="kanban" element={<KanbanPage />} />
             <Route path="messenger" element={<MessengerPage />} />
-            <Route path="settings" element={<SettingsPage />} />
+            <Route path="pomodoro" element={<PomodoroPage />} />
+<Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/calendar" replace />} />
         </Routes>

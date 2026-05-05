@@ -3,7 +3,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, subMonths, addWeeks, subWeeks,
   isSameMonth, isToday, isBefore, startOfDay, parseISO, differenceInDays,
   addYears, getISOWeek, isSameDay, formatDistanceToNow } from 'date-fns'
-import { ChevronLeft, ChevronRight, Plus, X, Check, Pencil, Trash2, MapPin, Users, RefreshCw, Clock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Check, Pencil, Trash2, MapPin, Users, RefreshCw, Clock, Search } from 'lucide-react'
 import { useSpace } from '../context/SpaceContext'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -183,7 +183,7 @@ function SubCalendarModal({ existing, onSave, onDelete, onClose }: {
 export default function CalendarPage() {
   const { events, subCalendars, addEvent, deleteEvent, updateEvent, addSubCalendar, updateSubCalendar, deleteSubCalendar } = useSpace()
   const { user, userProfile } = useAuth()
-  const { highlightWeekends, weekendColor, language, calendarName } = useAppSettings()
+  const { highlightWeekends, weekendColor, language, calendarName, weekStartsOn } = useAppSettings()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<View>('month')
 
@@ -195,7 +195,16 @@ export default function CalendarPage() {
   const [hiddenCals, setHiddenCals] = useState<Set<string>>(new Set())
   const [showSubCalModal, setShowSubCalModal] = useState(false)
   const [editingSubCal, setEditingSubCal] = useState<SubCalendar | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [sidebarOpen, setSidebarOpenState] = useState(() => {
+    try { const v = localStorage.getItem('cal-sidebar-open'); return v === null ? true : v === 'true' } catch { return true }
+  })
+  const setSidebarOpen = (v: boolean) => {
+    setSidebarOpenState(v)
+    try { localStorage.setItem('cal-sidebar-open', String(v)) } catch {}
+  }
   const [showMiniCal, setShowMiniCal] = useState(false)
   const [compactTabs, setCompactTabs] = useState(false)
   const [viewDropOpen, setViewDropOpen] = useState(false)
@@ -238,11 +247,11 @@ export default function CalendarPage() {
   // Compute view range for recurrence expansion
   const getViewRange = (): [Date, Date] => {
     if (view === 'month') {
-      return [startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 }), endOfWeek(endOfMonth(currentDate), { weekStartsOn: 0 })]
+      return [startOfWeek(startOfMonth(currentDate), { weekStartsOn }), endOfWeek(endOfMonth(currentDate), { weekStartsOn })]
     } else if (view === 'week' || view === 'scheduler' || view === 'table') {
-      return [startOfWeek(currentDate, { weekStartsOn: 1 }), endOfWeek(currentDate, { weekStartsOn: 1 })]
+      return [startOfWeek(currentDate, { weekStartsOn }), endOfWeek(currentDate, { weekStartsOn })]
     } else if (view === 'tiles') {
-      const ws = startOfWeek(currentDate, { weekStartsOn: 1 })
+      const ws = startOfWeek(currentDate, { weekStartsOn })
       return [ws, addDays(ws, 13)]
     } else if (view === 'agenda' || view === 'list') {
       return [startOfMonth(currentDate), addMonths(startOfMonth(currentDate), 3)]
@@ -251,7 +260,10 @@ export default function CalendarPage() {
     }
   }
   const [viewStart, viewEnd] = getViewRange()
-  const visibleEvents = expandRecurringEvents(baseVisibleEvents, viewStart, viewEnd)
+  const expandedEvents = expandRecurringEvents(baseVisibleEvents, viewStart, viewEnd)
+  const visibleEvents = searchQuery.trim()
+    ? expandedEvents.filter(e => e.title.toLowerCase().includes(searchQuery.toLowerCase()) || e.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+    : expandedEvents
 
   const getColor = (event: CalendarEvent) => {
     const ids = getEventTagIds(event)
@@ -294,6 +306,19 @@ export default function CalendarPage() {
     return next
   })
 
+  const handleEventDrop = async (eventId: string, newDateStr: string) => {
+    const baseId = eventId.includes('_') ? eventId.split('_')[0] : eventId
+    const original = events.find(e => e.id === baseId)
+    if (!original || original.recurrence) return
+    if (original.date === newDateStr) return
+    const delta = differenceInDays(parseISO(newDateStr), parseISO(original.date))
+    const updates: Partial<CalendarEvent> = { date: newDateStr }
+    if (original.endDate) {
+      updates.endDate = format(addDays(parseISO(original.endDate), delta), 'yyyy-MM-dd')
+    }
+    await updateEvent(baseId, updates)
+  }
+
   const openAdd = (d: Date, time = '') => {
     setClickedDate(d); setEditingEvent(null); setClickedTime(time); setShowModal(true)
   }
@@ -315,13 +340,13 @@ export default function CalendarPage() {
     ? `${monthNames[monthIndex]} ${year}`
     : view === 'week' || view === 'scheduler' || view === 'table'
     ? (() => {
-        const ws = startOfWeek(currentDate, { weekStartsOn: 1 })
-        const we = endOfWeek(currentDate, { weekStartsOn: 1 })
+        const ws = startOfWeek(currentDate, { weekStartsOn })
+        const we = endOfWeek(currentDate, { weekStartsOn })
         return `${format(ws, 'MMM d')} – ${format(we, 'MMM d, yyyy')}`
       })()
     : view === 'tiles'
     ? (() => {
-        const ws = startOfWeek(currentDate, { weekStartsOn: 1 })
+        const ws = startOfWeek(currentDate, { weekStartsOn })
         const we = addDays(ws, 13)
         return `${format(ws, 'MMM d')} – ${format(we, 'MMM d, yyyy')}`
       })()
@@ -452,6 +477,34 @@ export default function CalendarPage() {
 
           {/* Right: view tabs + add button */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Event search */}
+            {compactTabs && !searchOpen ? (
+              <button
+                onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 50) }}
+                className={clsx('w-7 h-7 flex items-center justify-center rounded-lg border transition-colors',
+                  searchQuery ? 'border-violet-500/50 bg-violet-500/10 text-violet-500' : 'border-border bg-surface text-text-muted hover:text-text-primary hover:bg-surface-hover')}
+                title="Search events">
+                <Search size={13} />
+              </button>
+            ) : (
+              <div className="relative flex items-center">
+                <Search size={13} className="absolute left-2.5 text-text-muted pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onBlur={() => { if (!searchQuery) setSearchOpen(false) }}
+                  onKeyDown={e => { if (e.key === 'Escape') { setSearchQuery(''); setSearchOpen(false) } }}
+                  placeholder="Search events…"
+                  className="pl-7 pr-6 py-1.5 text-xs bg-surface border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-violet-500/50 w-36 transition-all focus:w-44"
+                />
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(''); setSearchOpen(false) }} className="absolute right-1.5 text-text-muted hover:text-text-primary transition-colors">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            )}
             {compactTabs ? (
               /* Compact: dropdown */
               <div className="relative">
@@ -517,9 +570,11 @@ export default function CalendarPage() {
             getEventBg={getEventBg}
             onDayClick={d => openAdd(d)}
             onEventClick={openEdit}
+            onEventDrop={handleEventDrop}
             highlightWeekends={highlightWeekends}
             weekendColor={weekendColor}
             lang={lang}
+            weekStartsOn={weekStartsOn}
           />
         )}
         {view === 'week' && (
@@ -531,6 +586,7 @@ export default function CalendarPage() {
             getEventBg={getEventBg}
             onSlotClick={(d, t) => openAdd(d, t)}
             onEventClick={openEdit}
+            weekStartsOn={weekStartsOn}
           />
         )}
         {view === 'day' && (
@@ -552,6 +608,7 @@ export default function CalendarPage() {
             getTextColor={getTextColor}
             onEventClick={openEdit}
             onSlotClick={d => openAdd(d)}
+            weekStartsOn={weekStartsOn}
           />
         )}
         {view === 'agenda' && (
@@ -579,6 +636,7 @@ export default function CalendarPage() {
             subCalendars={subCalendars}
             getColor={getColor}
             onEventClick={openEdit}
+            weekStartsOn={weekStartsOn}
           />
         )}
         {view === 'tiles' && (
@@ -587,6 +645,7 @@ export default function CalendarPage() {
             events={visibleEvents}
             getColor={getColor}
             onEventClick={openEdit}
+            weekStartsOn={weekStartsOn}
           />
         )}
       </div>
@@ -679,9 +738,10 @@ function MiniCalendar({ selected, onSelect, onClose }: {
   onSelect: (d: Date) => void
   onClose: () => void
 }) {
+  const { weekStartsOn } = useAppSettings()
   const [mini, setMini] = useState(startOfMonth(selected))
   const miniEnd = endOfMonth(mini)
-  const gridStart = startOfWeek(mini, { weekStartsOn: 0 })
+  const gridStart = startOfWeek(mini, { weekStartsOn })
   const weeks: Date[][] = []
   let d = gridStart
   while (d <= miniEnd || weeks.length < 6) {
@@ -702,7 +762,7 @@ function MiniCalendar({ selected, onSelect, onClose }: {
         </div>
         {/* Day names */}
         <div className="grid grid-cols-7 mb-1">
-          {['S','M','T','W','T','F','S'].map((n, i) => (
+          {(['S','M','T','W','T','F','S'].slice(weekStartsOn).concat(['S','M','T','W','T','F','S'].slice(0, weekStartsOn))).map((n, i) => (
             <div key={i} className="text-center text-xs font-semibold text-text-muted py-1">{n}</div>
           ))}
         </div>
@@ -734,8 +794,78 @@ function MiniCalendar({ selected, onSelect, onClose }: {
   )
 }
 
+// ── Mouse-based calendar drag ─────────────────────────────────────────────────
+let _calGhost: HTMLDivElement | null = null
+
+function _createGhost(x: number, y: number, text: string, bg: string) {
+  _calGhost = document.createElement('div')
+  _calGhost.style.cssText = `position:fixed;pointer-events:none;z-index:9999;background:${bg};color:#fff;padding:2px 10px;border-radius:9999px;font-size:12px;font-weight:500;opacity:0.9;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.3);white-space:nowrap;`
+  _calGhost.textContent = text
+  document.body.appendChild(_calGhost)
+  _calGhost.style.left = x + 'px'
+  _calGhost.style.top = y + 'px'
+}
+
+function _moveGhost(x: number, y: number) {
+  if (_calGhost) { _calGhost.style.left = x + 'px'; _calGhost.style.top = y + 'px' }
+}
+
+function _removeGhost() {
+  if (_calGhost) { _calGhost.remove(); _calGhost = null }
+}
+
+function _findCalDate(x: number, y: number): string | null {
+  if (_calGhost) _calGhost.style.display = 'none'
+  const el = document.elementFromPoint(x, y)
+  if (_calGhost) _calGhost.style.display = ''
+  if (!el) return null
+  const cell = (el as Element).closest('[data-cal-date]')
+  return cell?.getAttribute('data-cal-date') ?? null
+}
+
+function startCalDrag(
+  e: React.MouseEvent,
+  eventId: string,
+  displayText: string,
+  bgColor: string,
+  setDragOverDate: (d: string | null) => void,
+  onEventDrop: (id: string, date: string) => void
+) {
+  e.preventDefault()
+  const startX = e.clientX, startY = e.clientY
+  let dragging = false
+
+  const onMove = (me: MouseEvent) => {
+    if (!dragging) {
+      if (Math.abs(me.clientX - startX) + Math.abs(me.clientY - startY) < 5) return
+      dragging = true
+      _createGhost(me.clientX, me.clientY, displayText, bgColor)
+      document.body.style.cursor = 'grabbing'
+    }
+    _moveGhost(me.clientX, me.clientY)
+    setDragOverDate(_findCalDate(me.clientX, me.clientY))
+  }
+
+  const onUp = (me: MouseEvent) => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    if (dragging) {
+      _removeGhost()
+      const dateStr = _findCalDate(me.clientX, me.clientY)
+      setDragOverDate(null)
+      if (dateStr) onEventDrop(eventId, dateStr)
+      const suppress = (ce: Event) => { ce.stopPropagation(); document.removeEventListener('click', suppress, true) }
+      document.addEventListener('click', suppress, true)
+    }
+  }
+
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
 // ── Month view ────────────────────────────────────────────────────────────────
-function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, getEventBg, onDayClick, onEventClick, highlightWeekends, weekendColor, lang }: {
+function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, getEventBg, onDayClick, onEventClick, onEventDrop, highlightWeekends, weekendColor, lang, weekStartsOn }: {
   currentDate: Date
   events: CalendarEvent[]
   subCalendars: SubCalendar[]
@@ -744,14 +874,19 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
   getEventBg: (e: CalendarEvent) => React.CSSProperties
   onDayClick: (d: Date) => void
   onEventClick: (e: CalendarEvent, ev: React.MouseEvent) => void
+  onEventDrop: (eventId: string, newDateStr: string) => void
   highlightWeekends: boolean
   weekendColor: string
   lang: Lang
+  weekStartsOn: 0 | 1 | 6
 }) {
   const { use24Hour } = useAppSettings()
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null)
+
+
   const monthStart = startOfMonth(currentDate)
-  const calStart = startOfWeek(monthStart, { weekStartsOn: 0 })
-  const calEnd = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 0 })
+  const calStart = startOfWeek(monthStart, { weekStartsOn })
+  const calEnd = endOfWeek(endOfMonth(currentDate), { weekStartsOn })
   const weeks: Date[][] = []
   let day = calStart
   while (day <= calEnd) {
@@ -760,8 +895,21 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
     weeks.push(week)
   }
 
-  const dayNames = DAY_NAMES[lang] ?? DAY_NAMES['en']
-  const isWeekend = (colIndex: number) => colIndex === 0 || colIndex === 6
+  // Rotate day names and weekend columns based on weekStartsOn
+  const allDayNames = DAY_NAMES[lang] ?? DAY_NAMES['en']
+  // DAY_NAMES[lang] is [Sun, Mon, Tue, Wed, Thu, Fri, Sat]
+  // weekStartsOn 0=Sun, 1=Mon, 6=Sat
+  const rotatedDayNames = [
+    ...allDayNames.slice(weekStartsOn),
+    ...allDayNames.slice(0, weekStartsOn),
+  ]
+  const dayNames = rotatedDayNames
+  // Weekend col indices after rotation
+  const weekendDayNums = new Set([0, 6]) // Sun=0, Sat=6
+  const isWeekend = (colIndex: number) => {
+    const dayOfWeek = (weekStartsOn + colIndex) % 7
+    return weekendDayNums.has(dayOfWeek)
+  }
   const BAND_H = 24
   const DAY_NUM_H = 28
 
@@ -800,15 +948,6 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
             const weekNum = getISOWeek(week[1] ?? week[0])
             const weekStartStr = format(week[0], 'yyyy-MM-dd')
             const weekEndStr   = format(week[6], 'yyyy-MM-dd')
-            // Per-column: first free row to start single-day events (fills gaps between multi-day bars)
-            const colNumRows = Array.from({ length: 7 }, (_, col) => {
-              const colPlacements = placements.filter(p => p.startCol <= col && p.endCol >= col)
-              if (colPlacements.length === 0) return 0
-              const occupied = new Set(colPlacements.map(p => p.row))
-              let firstFree = 0
-              while (occupied.has(firstFree)) firstFree++
-              return firstFree
-            })
             return (
               <div key={wi} className="flex flex-1 border-b border-border last:border-b-0 min-h-0">
                 {/* Week number cell */}
@@ -818,7 +957,7 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
 
                 {/* 7 day columns — positioned relative for multi-day bars */}
                 <div className="flex-1 relative grid grid-cols-7">
-                  {/* Multi-day spanning bars */}
+                    {/* Multi-day spanning bars */}
                   {placements.map((p, pi) => {
                     const color = getColor(p.ev)
                     const tc = getTextColor(p.ev)
@@ -826,8 +965,10 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                     const endsAfterWeek = (p.ev.endDate ?? p.ev.date) > weekEndStr
                     const rL = startsBeforeWeek ? 0 : 11
                     const rR = endsAfterWeek ? 0 : 11
+                    const canDrag = !p.ev.recurrence
                     return (
                       <div key={pi}
+                        onMouseDown={canDrag ? e => { e.stopPropagation(); startCalDrag(e, p.ev.id, (p.ev.emoji ? p.ev.emoji + ' ' : '') + p.ev.title, getColor(p.ev), setDragOverDate, onEventDrop) } : undefined}
                         onClick={e => { e.stopPropagation(); onEventClick(p.ev, e) }}
                         className="absolute text-xs font-medium cursor-pointer hover:brightness-95 z-10 flex items-center gap-1 px-2 overflow-hidden"
                         style={{
@@ -851,27 +992,34 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                     const singleEvs = getSingleDayEvents(d)
                     const inMonth = isSameMonth(d, currentDate)
                     const today = isToday(d)
-                    const weekend = highlightWeekends && isWeekend(di)
+                    const past = !today && isBefore(d, startOfDay(new Date()))
+                    const weekend = highlightWeekends && isWeekend(di) && inMonth
+                    const dateStr = format(d, 'yyyy-MM-dd')
                     return (
-                      <div key={di} onClick={() => onDayClick(d)}
+                      <div key={di}
+                        data-cal-date={dateStr}
+                        onClick={() => onDayClick(d)}
                         className={clsx(
-                          'border-r border-border last:border-r-0 cursor-pointer group overflow-hidden transition-colors',
-                          inMonth ? 'hover:bg-surface-hover/40' : 'opacity-40',
+                          'border-r border-border last:border-r-0 cursor-pointer group overflow-hidden transition-colors hover:bg-surface-hover/40',
+                          !inMonth && !today && 'bg-bg-secondary/60',
+                          dragOverDate === dateStr && 'ring-2 ring-inset ring-violet-500/60 bg-violet-500/10'
                         )}
-                        style={weekend && inMonth ? { backgroundColor: weekendColor + '30' } : undefined}>
+                        style={weekend && dragOverDate !== dateStr ? { backgroundColor: weekendColor + '30' } : undefined}>
                         {/* Date number */}
                         <div className="flex justify-end px-1.5 pt-1" style={{ height: DAY_NUM_H }}>
                           <div className={clsx(
                             'w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold transition-colors',
-                            today ? 'bg-violet-600 text-white' : 'text-text-secondary group-hover:text-text-primary'
+                            today ? 'bg-violet-600 text-white' : inMonth ? 'text-text-secondary group-hover:text-text-primary' : 'text-text-muted/40'
                           )}>
                             {format(d, 'd')}
                           </div>
                         </div>
                         {/* Single-day events */}
-                        <div className="space-y-px px-0.5 pb-1 overflow-hidden" style={{ marginTop: colNumRows[di] * BAND_H }}>
+                        <div className="space-y-px px-0.5 pb-1 overflow-hidden" style={{ marginTop: numRows * BAND_H }}>
                           {singleEvs.slice(0, 3).map(ev => (
-                            <div key={ev.id} onClick={e => { e.stopPropagation(); onEventClick(ev, e) }}
+                            <div key={ev.id}
+                              onMouseDown={!ev.recurrence ? e => { e.stopPropagation(); startCalDrag(e, ev.id, (ev.emoji ? ev.emoji + ' ' : '') + ev.title, getColor(ev), setDragOverDate, onEventDrop) } : undefined}
+                              onClick={e => { e.stopPropagation(); onEventClick(ev, e) }}
                               className="text-xs px-1.5 py-px rounded-full font-medium cursor-pointer hover:brightness-95 leading-5 flex items-center gap-1 overflow-hidden min-h-[1.25rem]"
                               style={{ ...getEventBg(ev), color: getTextColor(ev) }}>
                               {ev.recurrence && <RefreshCw size={9} className="shrink-0 opacity-80" />}
@@ -898,7 +1046,7 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
 }
 
 // ── Week view ─────────────────────────────────────────────────────────────────
-function WeekView({ currentDate, events, getColor, getTextColor, getEventBg, onSlotClick, onEventClick }: {
+function WeekView({ currentDate, events, getColor, getTextColor, getEventBg, onSlotClick, onEventClick, weekStartsOn }: {
   currentDate: Date
   events: CalendarEvent[]
   getColor: (e: CalendarEvent) => string
@@ -906,9 +1054,10 @@ function WeekView({ currentDate, events, getColor, getTextColor, getEventBg, onS
   getEventBg: (e: CalendarEvent) => React.CSSProperties
   onSlotClick: (d: Date, time: string) => void
   onEventClick: (e: CalendarEvent, ev: React.MouseEvent) => void
+  weekStartsOn: 0 | 1 | 6
 }) {
   const { use24Hour } = useAppSettings()
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
+  const weekStart = startOfWeek(currentDate, { weekStartsOn })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -1169,7 +1318,7 @@ function DayView({ currentDate, events, getColor, getTextColor, onSlotClick, onE
 }
 
 // ── Scheduler view ────────────────────────────────────────────────────────────
-function SchedulerView({ currentDate, events, subCalendars, getColor, getTextColor, onEventClick, onSlotClick }: {
+function SchedulerView({ currentDate, events, subCalendars, getColor, getTextColor, onEventClick, onSlotClick, weekStartsOn }: {
   currentDate: Date
   events: CalendarEvent[]
   subCalendars: SubCalendar[]
@@ -1177,9 +1326,10 @@ function SchedulerView({ currentDate, events, subCalendars, getColor, getTextCol
   getTextColor: (e: CalendarEvent) => string
   onEventClick: (e: CalendarEvent, ev: React.MouseEvent) => void
   onSlotClick: (d: Date) => void
+  weekStartsOn: 0 | 1 | 6
 }) {
   const { use24Hour } = useAppSettings()
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
+  const weekStart = startOfWeek(currentDate, { weekStartsOn })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const unassignedEvs = events.filter(e => !e.subCalendarId || !subCalendars.find(s => s.id === e.subCalendarId))
 
@@ -1419,16 +1569,17 @@ function ListView({ currentDate, events, subCalendars, getColor, getTextColor, o
 }
 
 // ── Table view ────────────────────────────────────────────────────────────────
-function TableView({ currentDate, events, subCalendars, getColor, onEventClick }: {
+function TableView({ currentDate, events, subCalendars, getColor, onEventClick, weekStartsOn }: {
   currentDate: Date
   events: CalendarEvent[]
   subCalendars: SubCalendar[]
   getColor: (e: CalendarEvent) => string
   onEventClick: (e: CalendarEvent, ev: React.MouseEvent) => void
+  weekStartsOn: 0 | 1 | 6
 }) {
   const { use24Hour } = useAppSettings()
-  const weekStartStr = format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
-  const weekEndStr = format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const weekStartStr = format(startOfWeek(currentDate, { weekStartsOn }), 'yyyy-MM-dd')
+  const weekEndStr = format(endOfWeek(currentDate, { weekStartsOn }), 'yyyy-MM-dd')
 
   const weekEvs = events
     .filter(e => e.date >= weekStartStr && e.date <= weekEndStr)
@@ -1493,14 +1644,15 @@ function TableView({ currentDate, events, subCalendars, getColor, onEventClick }
 }
 
 // ── Tiles view ────────────────────────────────────────────────────────────────
-function TilesView({ currentDate, events, getColor, onEventClick }: {
+function TilesView({ currentDate, events, getColor, onEventClick, weekStartsOn }: {
   currentDate: Date
   events: CalendarEvent[]
   getColor: (e: CalendarEvent) => string
   onEventClick: (e: CalendarEvent, ev: React.MouseEvent) => void
+  weekStartsOn: 0 | 1 | 6
 }) {
   const { use24Hour } = useAppSettings()
-  const ws = startOfWeek(currentDate, { weekStartsOn: 1 })
+  const ws = startOfWeek(currentDate, { weekStartsOn })
   const startStr = format(ws, 'yyyy-MM-dd')
   const endStr = format(addDays(ws, 13), 'yyyy-MM-dd')
 
