@@ -51,7 +51,7 @@ export default function OnboardingPage() {
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-text-primary">Set up your space</h1>
               <p className="text-text-secondary text-sm mt-2">
-                You need a shared space to start. Create one or join your partner's.
+                You need a shared space to start. Create one or join someone else's.
               </p>
             </div>
             <div className="space-y-3">
@@ -65,7 +65,7 @@ export default function OnboardingPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-text-primary text-sm">Create a space</p>
-                  <p className="text-text-muted text-xs mt-0.5">Get an invite code to share with your partner</p>
+                  <p className="text-text-muted text-xs mt-0.5">Get an invite code to share with your team</p>
                 </div>
               </button>
               <button
@@ -77,7 +77,7 @@ export default function OnboardingPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-text-primary text-sm">Join a space</p>
-                  <p className="text-text-muted text-xs mt-0.5">Enter your partner's invite code</p>
+                  <p className="text-text-muted text-xs mt-0.5">Enter someone's invite code to join their space</p>
                 </div>
               </button>
             </div>
@@ -90,7 +90,7 @@ export default function OnboardingPage() {
               <div className="text-3xl mb-3">🎉</div>
               <h1 className="text-2xl font-bold text-text-primary">Your space is ready!</h1>
               <p className="text-text-secondary text-sm mt-2">
-                Share this code with your partner so they can join.
+                Share this code so your teammates can join.
               </p>
             </div>
             <div className="card p-4 mb-4">
@@ -108,7 +108,7 @@ export default function OnboardingPage() {
               Continue to calendar →
             </button>
             <p className="text-center text-xs text-text-muted mt-3">
-              Your partner can also find and enter this code from their setup screen
+              Others can find and enter this code from their own setup screen
             </p>
           </>
         )}
@@ -118,7 +118,7 @@ export default function OnboardingPage() {
             <button onClick={() => setStep('choose')} className="btn-ghost mb-6 text-sm">← Back</button>
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-text-primary">Join a space</h1>
-              <p className="text-text-secondary text-sm mt-2">Enter the 6-character code from your partner</p>
+              <p className="text-text-secondary text-sm mt-2">Enter the 6-character invite code</p>
             </div>
             <form onSubmit={handleJoin} className="space-y-4">
               <input

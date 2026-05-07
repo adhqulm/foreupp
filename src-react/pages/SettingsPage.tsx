@@ -3,20 +3,17 @@ import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { useSpace } from '../context/SpaceContext'
 import { useAppSettings } from '../context/AppSettingsContext'
-import HueRingPicker from '../components/HueRingPicker'
 import ColorPresetPicker from '../components/ColorPresetPicker'
 import clsx from 'clsx'
 import { LANGUAGES, UI } from '../i18n/translations'
 import { ChevronDown, ChevronRight, Check, Copy, Users, Link2Off } from 'lucide-react'
 
 const PRESET_THEMES = [
-  { label: 'White',  hue: 0,   mode: 'white' as const },
-  { label: 'Beige',  hue: 30,  mode: 'light' as const },
-  { label: 'Rose',   hue: 350, mode: 'light' as const },
-  { label: 'Sage',   hue: 140, mode: 'light' as const },
-  { label: 'Sky',    hue: 210, mode: 'light' as const },
-  { label: 'Slate',  hue: 220, mode: 'dark'  as const },
-  { label: 'Walnut', hue: 25,  mode: 'dark'  as const },
+  { label: 'White',  hue: 0   },
+  { label: 'Beige',  hue: 30  },
+  { label: 'Rose',   hue: 350 },
+  { label: 'Sage',   hue: 140 },
+  { label: 'Sky',    hue: 210 },
 ]
 
 const CITY_TIMEZONES = [
@@ -95,7 +92,7 @@ export default function SettingsPage() {
   const [langDropdownOpen, setLangDropdownOpen] = useState(false)
   const selectedLang = LANGUAGES.find(l => l.code === language)
 
-  // FöreUpp / partner
+  // FöreUpp space
   const [joinCode, setJoinCode] = useState('')
   const [joinError, setJoinError] = useState('')
   const [joinLoading, setJoinLoading] = useState(false)
@@ -232,7 +229,7 @@ export default function SettingsPage() {
           {/* Mode toggle */}
           <div className="flex gap-2 mb-5">
             {(['light', 'dark'] as const).map(m => (
-              <button key={m} onClick={() => setTheme({ ...theme, mode: m })}
+              <button key={m} onClick={() => setTheme({ hue: theme.hue, mode: m })}
                 className={clsx('px-4 py-2 rounded-lg text-sm font-medium border transition-all capitalize',
                   theme.mode === m
                     ? 'bg-violet-600/25 text-text-primary border-violet-600/30'
@@ -247,9 +244,9 @@ export default function SettingsPage() {
           {/* Quick presets */}
           <div className="flex gap-2 flex-wrap mb-5">
             {PRESET_THEMES.map(p => (
-              <button key={p.label} onClick={() => setTheme({ hue: p.hue, mode: p.mode })}
+              <button key={p.label} onClick={() => setTheme({ hue: p.hue, mode: theme.mode })}
                 className={clsx('px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                  theme.hue === p.hue && theme.mode === p.mode
+                  theme.hue === p.hue
                     ? 'border-violet-600 bg-violet-600/20 text-text-primary'
                     : 'border-border text-text-secondary hover:border-violet-500/50 hover:bg-surface-hover'
                 )}>
@@ -258,20 +255,6 @@ export default function SettingsPage() {
             ))}
           </div>
 
-          {/* Hue ring */}
-          <div className="card flex flex-col items-center gap-4 py-6">
-            <p className="text-xs text-text-muted">Drag the ring to pick your colour</p>
-            <HueRingPicker
-              hue={theme.hue}
-              size={160}
-              onChange={(_, h) => setTheme({ hue: h, mode: theme.mode === 'white' ? 'light' : theme.mode })}
-            />
-            <p className="text-xs text-text-muted">
-              Current: <span className="font-medium text-text-secondary">
-                {theme.mode === 'white' ? 'White' : theme.mode === 'light' ? 'Light' : 'Dark'} · hue {Math.round(theme.hue)}°
-              </span>
-            </p>
-          </div>
         </section>
 
         {/* ── Calendar ─────────────────────────────────────────── */}
@@ -475,7 +458,7 @@ export default function SettingsPage() {
             {partner ? (
               <>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 overflow-hidden"
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 overflow-hidden leading-none"
                     style={{ backgroundColor: partner.color }}>
                     {partner.photoURL
                       ? <img src={partner.photoURL} alt="" className="w-full h-full object-cover" />
@@ -507,13 +490,13 @@ export default function SettingsPage() {
                         {codeCopied ? <Check size={15} className="text-green-400" /> : <Copy size={15} />}
                       </button>
                     </div>
-                    <p className="text-xs text-text-muted mt-1.5">{t.shareWithPartner ?? 'Share this with your partner to connect'}</p>
+                    <p className="text-xs text-text-muted mt-1.5">{t.shareWithPartner ?? 'Share this code so others can join your space'}</p>
                   </div>
                 )}
                 <div className="border-t border-border/50 pt-4">
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{t.joinPartnersSpace ?? "Join partner's space"}</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{t.joinPartnersSpace ?? 'Join a space'}</label>
                   {joinSuccess ? (
-                    <p className="text-sm text-green-500 bg-green-500/10 rounded-lg px-3 py-2">Joined! Refresh if your partner doesn't appear.</p>
+                    <p className="text-sm text-green-500 bg-green-500/10 rounded-lg px-3 py-2">Joined! Refresh if your teammate doesn't appear.</p>
                   ) : (
                     <form onSubmit={handleJoin} className="flex gap-2">
                       <input

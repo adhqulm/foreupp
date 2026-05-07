@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const { signIn } = useAuth()
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,9 +33,7 @@ export default function LoginPage() {
     <div className="flex items-center justify-center h-screen bg-bg-primary">
       <div className="w-full max-w-sm px-6 animate-slide-up">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-violet-600/20 border border-violet-600/30 flex items-center justify-center mx-auto mb-4">
-            <div className="w-5 h-5 rounded-full bg-violet-500" />
-          </div>
+          <img src="/transparentlogo.png" alt="" className="w-24 h-24 object-contain mx-auto" />
           <h1 className="text-2xl font-bold text-text-primary">Welcome back</h1>
           <p className="text-text-secondary text-sm mt-1">Sign in to FöreUpp</p>
         </div>
@@ -53,15 +53,29 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="input"
-              placeholder="••••••••"
-              required
-              autoFocus={!!prefillEmail}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="input pr-10"
+                placeholder="••••••••"
+                required
+                autoFocus={!!prefillEmail}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <div className="flex justify-end mt-1.5">
+              <Link to="/forgot-password" className="text-xs text-text-muted hover:text-violet-400 transition-colors">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           {error && (

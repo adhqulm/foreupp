@@ -7,6 +7,7 @@ import { AppSettingsProvider } from './context/AppSettingsContext'
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import CalendarPage from './pages/CalendarPage'
 import TrackersPage from './pages/TrackersPage'
 import CountdownsPage from './pages/CountdownsPage'
@@ -70,6 +71,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+          <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/onboarding" element={<PrivateRoute requireSpace={false}><SpaceProvider><OnboardingPage /></SpaceProvider></PrivateRoute>} />
           <Route path="/" element={<PrivateRoute><SpaceProvider><AppLayout /></SpaceProvider></PrivateRoute>}>
             <Route index element={<Navigate to="/calendar" replace />} />
@@ -79,7 +81,7 @@ export default function App() {
             <Route path="kanban" element={<KanbanPage />} />
             <Route path="messenger" element={<MessengerPage />} />
             <Route path="pomodoro" element={<PomodoroPage />} />
-<Route path="settings" element={<SettingsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/calendar" replace />} />
         </Routes>

@@ -14,12 +14,13 @@ interface Toast {
   senderName: string
   senderColor: string
   senderInitial: string
+  senderPhotoURL?: string
   text: string
   convId: string
 }
 
 function NotificationManager() {
-  const { conversations, members, setActiveConversationId } = useSpace()
+  const { conversations, members, setActiveConversationId, activeConversationId } = useSpace()
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -43,9 +44,11 @@ function NotificationManager() {
       const lastAt = conv.lastMessageAt ?? 0
       const prev = prevLastMsgAt.current[conv.id] ?? 0
 
-      // New message arrived, not sent by us, and we're not already on messenger
-      const senderIsUs = conv.lastMessageSenderId === user.uid
-      if (lastAt > prev && !onMessenger && !senderIsUs) {
+      // Show notification unless we're actively viewing this exact conversation
+      // Treat missing lastMessageSenderId as "sent by us" to avoid false positives
+      const senderIsUs = !conv.lastMessageSenderId || conv.lastMessageSenderId === user.uid
+      const isViewingThisConv = onMessenger && conv.id === activeConversationId
+      if (lastAt > prev && !isViewingThisConv && !senderIsUs) {
         const senderId = conv.lastMessageSenderId
           ?? conv.memberIds?.find(id => id !== user.uid)
         const senderProfile = senderId ? members[senderId] : null
@@ -56,7 +59,7 @@ function NotificationManager() {
 
         setToasts(p => {
           if (p.some(t => t.id === toastId)) return p
-          return [...p.slice(-3), { id: toastId, senderName, senderColor, senderInitial, text: conv.lastMessageText ?? '', convId: conv.id }]
+          return [...p.slice(-3), { id: toastId, senderName, senderColor, senderInitial, senderPhotoURL: senderProfile?.photoURL, text: conv.lastMessageText ?? '', convId: conv.id }]
         })
 
         const timer = setTimeout(() => {
@@ -68,7 +71,7 @@ function NotificationManager() {
 
       prevLastMsgAt.current[conv.id] = lastAt
     }
-  }, [conversations, user, location.pathname, members])
+  }, [conversations, user, location.pathname, members, activeConversationId])
 
   const dismiss = (id: string) => {
     clearTimeout(timerRefs.current[id])
@@ -89,9 +92,11 @@ function NotificationManager() {
       {toasts.map(toast => (
         <div key={toast.id}
           className="pointer-events-auto flex items-start gap-3 bg-bg-primary border border-border rounded-xl shadow-lg px-3 py-2.5 w-72 animate-scale-in">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-            style={{ backgroundColor: toast.senderColor }}>
-            {toast.senderInitial}
+          <div className="w-8 h-8 rounded-full shrink-0 overflow-hidden flex items-center justify-center text-sm font-bold text-white"
+            style={{ backgroundColor: toast.senderPhotoURL ? 'transparent' : toast.senderColor, lineHeight: 1 }}>
+            {toast.senderPhotoURL
+              ? <img src={toast.senderPhotoURL} alt="" className="w-full h-full object-cover" />
+              : toast.senderInitial}
           </div>
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openConv(toast.convId, toast.id)}>
             <p className="text-sm font-medium text-text-primary">{toast.senderName}</p>

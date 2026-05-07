@@ -125,8 +125,8 @@ export default function Sidebar() {
         {/* Logo + collapse toggle */}
         <div className={clsx('px-2 pt-2 pb-1 flex items-center', collapsed ? 'justify-center' : 'justify-between')}>
           {!collapsed && (
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-3 h-3 rounded-full bg-violet-500/60 shrink-0" />
+            <div className="flex-1 flex items-center justify-center gap-1">
+              <img src="/transparentlogo.png" alt="" className="w-8 h-8 shrink-0 object-contain" />
               <span className="text-xs font-semibold text-text-secondary tracking-widest uppercase">FöreUpp</span>
             </div>
           )}
@@ -205,7 +205,7 @@ export default function Sidebar() {
                     <div key={m.uid} className="flex items-center gap-2">
                       <div className="relative shrink-0">
                         <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden"
-                          style={{ backgroundColor: m.color }}>
+                          style={{ backgroundColor: m.color, lineHeight: 1 }}>
                           {m.photoURL
                             ? <img src={m.photoURL} alt="" className="w-full h-full object-cover" />
                             : m.displayName?.[0]?.toUpperCase() ?? '?'}
@@ -227,7 +227,7 @@ export default function Sidebar() {
             className={clsx('w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-hover transition-colors', collapsed && 'justify-center px-0')}
           >
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
-              style={{ backgroundColor: avatarSrc ? 'transparent' : (userProfile?.color ?? '#7c3aed') }}>
+              style={{ backgroundColor: avatarSrc ? 'transparent' : (userProfile?.color ?? '#7c3aed'), lineHeight: 1 }}>
               {avatarSrc
                 ? <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
                 : initials}
@@ -262,7 +262,7 @@ export default function Sidebar() {
                   {/* Large avatar */}
                   <div
                     className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white overflow-hidden shrink-0"
-                    style={{ backgroundColor: avatarSrc ? 'transparent' : (userProfile?.color ?? '#7c3aed') }}
+                    style={{ backgroundColor: avatarSrc ? 'transparent' : (userProfile?.color ?? '#7c3aed'), lineHeight: 1 }}
                   >
                     {avatarSrc
                       ? <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
@@ -315,7 +315,7 @@ export default function Sidebar() {
                         >
                           <div
                             className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
-                            style={{ backgroundColor: account.photoURL ? 'transparent' : '#7c3aed' }}
+                            style={{ backgroundColor: account.photoURL ? 'transparent' : '#7c3aed', lineHeight: 1 }}
                           >
                             {account.photoURL
                               ? <img src={account.photoURL} alt="" className="w-full h-full object-cover" />

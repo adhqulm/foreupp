@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  updatePassword as firebaseUpdatePassword
+  updatePassword as firebaseUpdatePassword,
+  sendPasswordResetEmail
 } from 'firebase/auth'
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
@@ -26,6 +27,7 @@ interface AuthContextValue {
   updateProfile: (data: { displayName?: string; color?: string; phone?: string; bio?: string }) => Promise<void>
   updatePassword: (newPassword: string) => Promise<void>
   updatePhotoURL: (url: string | null) => Promise<void>
+  resetPassword: (email: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -108,6 +110,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await firebaseUpdatePassword(user, newPassword)
   }
 
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email)
+  }
+
   const updatePhotoURL = async (url: string | null) => {
     if (!user) return
     await updateDoc(doc(db, 'users', user.uid), { photoURL: url ?? '' })
@@ -120,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, signUp, signIn, signOut, updateProfile, updatePassword, updatePhotoURL }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, signUp, signIn, signOut, updateProfile, updatePassword, updatePhotoURL, resetPassword }}>
       {children}
     </AuthContext.Provider>
   )

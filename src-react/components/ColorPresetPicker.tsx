@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import { useTranslation } from '../hooks/useTranslation'
 
-const TEAMUP_COLORS = [
+const COLOR_PALETTE = [
   '#7A4E28','#9E7040','#C96514','#D96520','#B82424','#BB2260','#8A2540',
   '#E83838','#F06818','#F060A8','#E83560','#C82424','#FA8530','#F7AE28',
   '#7E38E8','#8C48F0','#9B6EF7','#B09AFB','#CA98FC','#DE60F0','#FCD8EE',
@@ -27,7 +27,7 @@ export default function ColorPresetPicker({ color, onChange }: Props) {
     <div>
       {/* 7×6 preset grid */}
       <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
-        {TEAMUP_COLORS.map(c => (
+        {COLOR_PALETTE.map(c => (
           <button
             key={c}
             type="button"

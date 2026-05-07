@@ -153,7 +153,7 @@ function SubCalendarModal({ existing, onSave, onDelete, onClose }: {
             <ColorPresetPicker color={color} onChange={setColor} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-2">{t.color ?? 'Text color'}</label>
+            <label className="block text-xs font-medium text-text-secondary mb-2">Text color</label>
             <div className="flex gap-2">
               {(['white', 'black'] as const).map(tc => (
                 <button key={tc} type="button" onClick={() => setTextColor(tc)}
@@ -945,6 +945,13 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
         <div className="h-full flex flex-col">
           {weeks.map((week, wi) => {
             const { placements, numRows } = getWeekMultiDayPlacements(week, events)
+            const colRows = week.map((_, di) => {
+              let maxRow = -1
+              for (const p of placements) {
+                if (p.startCol <= di && di <= p.endCol) maxRow = Math.max(maxRow, p.row)
+              }
+              return maxRow + 1
+            })
             const weekNum = getISOWeek(week[1] ?? week[0])
             const weekStartStr = format(week[0], 'yyyy-MM-dd')
             const weekEndStr   = format(week[6], 'yyyy-MM-dd')
@@ -970,7 +977,7 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                       <div key={pi}
                         onMouseDown={canDrag ? e => { e.stopPropagation(); startCalDrag(e, p.ev.id, (p.ev.emoji ? p.ev.emoji + ' ' : '') + p.ev.title, getColor(p.ev), setDragOverDate, onEventDrop) } : undefined}
                         onClick={e => { e.stopPropagation(); onEventClick(p.ev, e) }}
-                        className="absolute text-xs font-medium cursor-pointer hover:brightness-95 z-10 flex items-center gap-1 px-2 overflow-hidden"
+                        className="absolute text-xs font-medium cursor-pointer hover:brightness-95 z-10 flex items-center gap-1 px-2 overflow-hidden leading-none"
                         style={{
                           left: `calc(${p.startCol / 7 * 100}% + ${startsBeforeWeek ? 0 : 2}px)`,
                           width: `calc(${(p.endCol - p.startCol + 1) / 7 * 100}% - ${(startsBeforeWeek ? 0 : 2) + (endsAfterWeek ? 0 : 2)}px)`,
@@ -982,7 +989,7 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                         }}>
                         {p.showTitle && p.ev.recurrence && <RefreshCw size={9} className="shrink-0 opacity-80" />}
                         {p.showTitle && p.ev.startTime && !p.ev.allDay && <span className="opacity-75 shrink-0">{formatTime(p.ev.startTime, use24Hour)}</span>}
-                        {p.showTitle && <span className="truncate">{p.ev.emoji ? `${p.ev.emoji} ` : ''}{p.ev.title}</span>}
+                        {p.showTitle && <span className="truncate leading-none">{p.ev.emoji ? `${p.ev.emoji} ` : ''}{p.ev.title}</span>}
                       </div>
                     )
                   })}
@@ -995,12 +1002,40 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                     const past = !today && isBefore(d, startOfDay(new Date()))
                     const weekend = highlightWeekends && isWeekend(di) && inMonth
                     const dateStr = format(d, 'yyyy-MM-dd')
+
+                    // Find empty row slots in the multi-day zone for this column
+                    const occupiedRows = new Set(
+                      placements.filter(p => p.startCol <= di && di <= p.endCol).map(p => p.row)
+                    )
+                    const freeSlots: number[] = []
+                    for (let r = 0; r < colRows[di]; r++) {
+                      if (!occupiedRows.has(r)) freeSlots.push(r)
+                    }
+                    const gapEvs = singleEvs.slice(0, freeSlots.length)
+                    const belowEvs = singleEvs.slice(freeSlots.length)
+                    const maxBelow = 3 - gapEvs.length
+                    const visibleBelow = belowEvs.slice(0, maxBelow)
+                    const hiddenCount = singleEvs.length - gapEvs.length - visibleBelow.length
+
+                    const renderEventPill = (ev: CalendarEvent) => (
+                      <div key={ev.id}
+                        onMouseDown={!ev.recurrence ? e => { e.stopPropagation(); startCalDrag(e, ev.id, (ev.emoji ? ev.emoji + ' ' : '') + ev.title, getColor(ev), setDragOverDate, onEventDrop) } : undefined}
+                        onClick={e => { e.stopPropagation(); onEventClick(ev, e) }}
+                        className="text-xs px-1.5 py-px rounded-full font-medium cursor-pointer hover:brightness-95 leading-5 flex items-center gap-1 overflow-hidden min-h-[1.25rem]"
+                        style={{ ...getEventBg(ev), color: getTextColor(ev) }}>
+                        {ev.recurrence && <RefreshCw size={9} className="shrink-0 opacity-80" />}
+                        {ev.emoji && <span className="shrink-0">{ev.emoji}</span>}
+                        {ev.startTime && !ev.allDay && <span className="opacity-75 shrink-0">{formatTime(ev.startTime, use24Hour)}</span>}
+                        <span className="truncate leading-none">{ev.title}</span>
+                      </div>
+                    )
+
                     return (
                       <div key={di}
                         data-cal-date={dateStr}
                         onClick={() => onDayClick(d)}
                         className={clsx(
-                          'border-r border-border last:border-r-0 cursor-pointer group overflow-hidden transition-colors hover:bg-surface-hover/40',
+                          'relative border-r border-border last:border-r-0 cursor-pointer group overflow-hidden transition-colors hover:bg-surface-hover/40',
                           !inMonth && !today && 'bg-bg-secondary/60',
                           dragOverDate === dateStr && 'ring-2 ring-inset ring-violet-500/60 bg-violet-500/10'
                         )}
@@ -1008,28 +1043,25 @@ function MonthView({ currentDate, events, subCalendars, getColor, getTextColor, 
                         {/* Date number */}
                         <div className="flex justify-end px-1.5 pt-1" style={{ height: DAY_NUM_H }}>
                           <div className={clsx(
-                            'w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                            'w-5 h-5 flex items-center justify-center rounded-full text-xs font-semibold transition-colors',
                             today ? 'bg-violet-600 text-white' : inMonth ? 'text-text-secondary group-hover:text-text-primary' : 'text-text-muted/40'
                           )}>
                             {format(d, 'd')}
                           </div>
                         </div>
-                        {/* Single-day events */}
-                        <div className="space-y-px px-0.5 pb-1 overflow-hidden" style={{ marginTop: numRows * BAND_H }}>
-                          {singleEvs.slice(0, 3).map(ev => (
-                            <div key={ev.id}
-                              onMouseDown={!ev.recurrence ? e => { e.stopPropagation(); startCalDrag(e, ev.id, (ev.emoji ? ev.emoji + ' ' : '') + ev.title, getColor(ev), setDragOverDate, onEventDrop) } : undefined}
-                              onClick={e => { e.stopPropagation(); onEventClick(ev, e) }}
-                              className="text-xs px-1.5 py-px rounded-full font-medium cursor-pointer hover:brightness-95 leading-5 flex items-center gap-1 overflow-hidden min-h-[1.25rem]"
-                              style={{ ...getEventBg(ev), color: getTextColor(ev) }}>
-                              {ev.recurrence && <RefreshCw size={9} className="shrink-0 opacity-80" />}
-                              {ev.emoji && <span className="shrink-0">{ev.emoji}</span>}
-                              {ev.startTime && !ev.allDay && <span className="opacity-75 shrink-0">{formatTime(ev.startTime, use24Hour)}</span>}
-                              <span className="truncate">{ev.title}</span>
-                            </div>
-                          ))}
-                          {singleEvs.length > 3 && (
-                            <p className="text-xs text-text-muted pl-1.5 leading-5">+{singleEvs.length - 3} more</p>
+                        {/* Single events filling empty gap rows */}
+                        {gapEvs.map((ev, i) => (
+                          <div key={ev.id}
+                            className="absolute px-0.5"
+                            style={{ top: DAY_NUM_H + freeSlots[i] * BAND_H, left: 0, right: 0, height: BAND_H - 2 }}>
+                            {renderEventPill(ev)}
+                          </div>
+                        ))}
+                        {/* Single-day events below the multi-day zone */}
+                        <div className="space-y-px px-0.5 pb-1 overflow-hidden" style={{ marginTop: colRows[di] * BAND_H }}>
+                          {visibleBelow.map(ev => renderEventPill(ev))}
+                          {hiddenCount > 0 && (
+                            <p className="text-xs text-text-muted pl-1.5 leading-5">+{hiddenCount} more</p>
                           )}
                         </div>
                       </div>
@@ -1734,7 +1766,7 @@ function EventDetailModal({ event, subCalendars, userProfile, onClose, onEdit, o
       : formatTime(event.startTime, use24Hour)
 
   const { members } = useSpace()
-  const creatorName = members[event.createdBy]?.displayName ?? event.createdBy
+  const creatorName = members[event.createdBy]?.displayName ?? null
   const createdAgo = formatDistanceToNow(new Date(event.createdAt), { addSuffix: true })
 
   return (
@@ -1837,7 +1869,7 @@ function EventDetailModal({ event, subCalendars, userProfile, onClose, onEdit, o
 
           {/* Footer */}
           <div className="flex items-center justify-between mt-5 pt-3 border-t border-border/40">
-            <p className="text-xs text-text-muted">Created {createdAgo} by {creatorName}</p>
+            <p className="text-xs text-text-muted">Created {createdAgo}{creatorName ? ` by ${creatorName}` : ''}</p>
             {confirmDelete ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-text-muted">{t.delete ?? 'Delete'}?</span>

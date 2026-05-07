@@ -101,7 +101,6 @@ export default function TrackersPage() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-xl font-bold text-text-primary">{t.trackers ?? 'Trackers'}</h2>
-            <p className="text-text-muted text-sm mt-0.5">Track your habits and goals together</p>
           </div>
           <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
             <Plus size={15} /> {t.newTracker ?? 'New tracker'}

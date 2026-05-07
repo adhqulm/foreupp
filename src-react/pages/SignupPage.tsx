@@ -31,9 +31,7 @@ export default function SignupPage() {
     <div className="flex items-center justify-center h-screen bg-bg-primary">
       <div className="w-full max-w-sm px-6 animate-slide-up">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-violet-600/20 border border-violet-600/30 flex items-center justify-center mx-auto mb-4">
-            <div className="w-5 h-5 rounded-full bg-violet-500" />
-          </div>
+          <img src="/transparentlogo.png" alt="" className="w-24 h-24 object-contain mx-auto" />
           <h1 className="text-2xl font-bold text-text-primary">Create account</h1>
           <p className="text-text-secondary text-sm mt-1">Get started with FöreUpp</p>
         </div>
@@ -45,7 +43,7 @@ export default function SignupPage() {
               type="text"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
-              className="input"
+              className="input bg-blue-50"
               placeholder="e.g. Emma"
               required
               autoFocus

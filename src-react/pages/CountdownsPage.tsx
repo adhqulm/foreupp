@@ -49,7 +49,6 @@ export default function CountdownsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-text-primary">{t.countdowns ?? 'Countdowns'}</h2>
-            <p className="text-text-muted text-sm mt-0.5">Count toward the things that matter</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -130,12 +129,12 @@ function CountdownCard({ countdown, onEdit, onDelete }: { countdown: Countdown; 
   const isZero = totalDays === 0
   const isPassed = countdown.type === 'countdown' && rawDays < 0
 
-  const creatorName = members[countdown.createdBy]?.displayName ?? countdown.createdBy
+  const creatorName = members[countdown.createdBy]?.displayName ?? null
 
   const pl = (n: number, singular: string, plural: string) => n === 1 ? singular : plural
 
   return (
-    <div className="card relative overflow-hidden group flex flex-col h-full" style={{ borderColor: `${countdown.color}30` }}>
+    <div className="card relative overflow-hidden group flex flex-col h-full !border-0">
       <div className="absolute top-0 left-0 right-0 h-0.5" style={{ backgroundColor: countdown.color }} />
 
       <div className="flex items-start justify-between mb-4">
@@ -231,7 +230,7 @@ function CountdownCard({ countdown, onEdit, onDelete }: { countdown: Countdown; 
 
       {/* Creator name pinned to bottom */}
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-border/30">
-        <span className="text-xs text-text-muted">{creatorName}</span>
+        <span className="text-xs text-text-muted">{creatorName ?? ''}</span>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
           <button onClick={onEdit} className="btn-ghost p-1 text-text-muted hover:text-text-primary">
             <Pencil size={12} />
@@ -307,14 +306,14 @@ function CreateCountdownModal({ existing, onClose, onAdd, onUpdate }: {
               <button
                 type="button"
                 onClick={() => setType('countdown')}
-                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium border transition-all flex items-center gap-2 justify-center', type === 'countdown' ? 'bg-violet-600/20 border-violet-600/40 text-violet-300' : 'border-border text-text-secondary hover:border-violet-600/30')}
+                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2 justify-center focus-visible:outline-none', type === 'countdown' ? 'bg-violet-600/20 border border-violet-600/40 text-violet-300' : 'text-text-secondary hover:bg-surface-hover')}
               >
                 <Timer size={15} /> {t.countdown ?? 'Countdown'}
               </button>
               <button
                 type="button"
                 onClick={() => setType('countup')}
-                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium border transition-all flex items-center gap-2 justify-center', type === 'countup' ? 'bg-violet-600/20 border-violet-600/40 text-violet-300' : 'border-border text-text-secondary hover:border-violet-600/30')}
+                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2 justify-center focus-visible:outline-none', type === 'countup' ? 'bg-violet-600/20 border border-violet-600/40 text-violet-300' : 'text-text-secondary hover:bg-surface-hover')}
               >
                 <TrendingUp size={15} /> {t.countUp ?? 'Count up'}
               </button>
@@ -328,14 +327,14 @@ function CreateCountdownModal({ existing, onClose, onAdd, onUpdate }: {
               <button
                 type="button"
                 onClick={() => setDisplayFormat('days')}
-                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium border transition-all', displayFormat === 'days' ? 'bg-violet-600/20 border-violet-600/40 text-violet-300' : 'border-border text-text-secondary hover:border-violet-600/30')}
+                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium transition-all focus-visible:outline-none', displayFormat === 'days' ? 'bg-violet-600/20 border border-violet-600/40 text-violet-300' : 'text-text-secondary hover:bg-surface-hover')}
               >
                 {t.daysOnly ?? 'Days only'}
               </button>
               <button
                 type="button"
                 onClick={() => setDisplayFormat('detailed')}
-                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium border transition-all', displayFormat === 'detailed' ? 'bg-violet-600/20 border-violet-600/40 text-violet-300' : 'border-border text-text-secondary hover:border-violet-600/30')}
+                className={clsx('py-2.5 px-3 rounded-lg text-sm font-medium transition-all focus-visible:outline-none', displayFormat === 'detailed' ? 'bg-violet-600/20 border border-violet-600/40 text-violet-300' : 'text-text-secondary hover:bg-surface-hover')}
               >
                 {t.yearsMonthsDays ?? 'Years / months / days'}
               </button>

@@ -8,7 +8,7 @@
  * TTL strategy (industry standard for collaborative desktop apps):
  *  - Volatile data (events, tracker entries): 24 h
  *  - Semi-static config (subcalendars, trackers, countdowns): 7 days
- *  - User/partner profiles: 1 h (handled by AuthContext separately)
+ *  - User/member profiles: 1 h (handled by AuthContext separately)
  *
  * Cache keys are scoped per spaceId so switching spaces never shows
  * stale data from a previous space.

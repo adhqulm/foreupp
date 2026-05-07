@@ -144,7 +144,6 @@ export default function KanbanPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-text-primary">{t.kanban ?? 'Kanban'}</h2>
-            <p className="text-text-muted text-sm mt-0.5">Boards &amp; task trackers</p>
           </div>
           <button onClick={() => setShowCreateBoard(true)} className="btn-primary flex items-center gap-2">
             <Plus size={15} /> New board

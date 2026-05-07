@@ -111,20 +111,32 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     if (!sid) { setSpaceId(null); return }
     setSpaceId(sid)
 
-    // Fetch all space members' profiles
+    // Seed members: own profile immediately + any cached member profiles
+    const cachedMembers = (() => {
+      try { return JSON.parse(localStorage.getItem(`members:${sid}`) ?? 'null') } catch { return null }
+    })() as Record<string, UserProfile> | null
+
+    const seed: Record<string, UserProfile> = { [user.uid]: userProfile, ...(cachedMembers ?? {}) }
+    setMembers(seed)
+    const cachedPartner = Object.values(seed).find(p => p.uid !== user.uid)
+    if (cachedPartner) setPartner(cachedPartner)
+
+    // Fetch all space members' profiles from Firestore
     const spaceRef = doc(db, 'spaces', sid)
     getDoc(spaceRef).then(async (snap) => {
       if (!snap.exists()) return
       const space = snap.data() as Space
-      const profiles: Record<string, UserProfile> = {}
-      await Promise.all(space.members.map(async (uid) => {
+      const profiles: Record<string, UserProfile> = { [user.uid]: userProfile }
+      await Promise.all(space.members.filter(uid => uid !== user.uid).map(async (uid) => {
         const pSnap = await getDoc(doc(db, 'users', uid))
         if (pSnap.exists()) profiles[uid] = pSnap.data() as UserProfile
       }))
       setMembers(profiles)
-      // Keep partner pointing to the first non-self member for UI that needs it
+      try { localStorage.setItem(`members:${sid}`, JSON.stringify(profiles)) } catch {}
       const partnerProfile = Object.values(profiles).find(p => p.uid !== user.uid)
       setPartner(partnerProfile ?? null)
+    }).catch(() => {
+      // Firestore read failed — using own profile + cached data seeded above
     })
   }, [user, userProfile?.spaceId])
 
@@ -398,7 +410,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     const partnerDoc = snap.docs[0]
     if (partnerDoc.id === user.uid) return { success: false, error: "That's your own invite code!" }
     const partnerData = partnerDoc.data() as UserProfile
-    if (!partnerData.spaceId) return { success: false, error: 'Partner has not set up their space yet' }
+    if (!partnerData.spaceId) return { success: false, error: 'That user has not set up their space yet' }
     const spaceSnap = await getDoc(doc(db, 'spaces', partnerData.spaceId))
     if (!spaceSnap.exists()) return { success: false, error: 'Space not found' }
     const spaceData = spaceSnap.data() as Space
@@ -560,7 +572,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       type: 'dm',
       memberIds: [user.uid, partnerUid],
       lastMessageAt: Date.now(),
-      lastMessageText: ''
+      lastMessageText: '',
+      lastMessageSenderId: user.uid,
     })
     return ref.id
   }
@@ -577,7 +590,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       createdBy: user.uid,
       createdAt: Date.now(),
       lastMessageAt: Date.now(),
-      lastMessageText: ''
+      lastMessageText: '',
+      lastMessageSenderId: user.uid,
     })
     return ref.id
   }
@@ -672,6 +686,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     await updateDoc(doc(db, 'conversations', targetConvId), {
       lastMessageAt: now,
       lastMessageText: msg.text.slice(0, 60),
+      lastMessageSenderId: user.uid,
     })
   }
 

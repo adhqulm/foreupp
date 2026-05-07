@@ -301,7 +301,7 @@ function ForwardModal({ conversations, members, currentUid, onClose, onForward }
                     : <div className="w-8 h-8 rounded-full bg-violet-600/20 flex items-center justify-center shrink-0"><Users size={14} className="text-violet-400" /></div>
                 ) : (
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                    style={{ backgroundColor: members[partnerUid ?? '']?.color ?? '#7c3aed' }}>
+                    style={{ backgroundColor: members[partnerUid ?? '']?.color ?? '#7c3aed', lineHeight: 1 }}>
                     {(name[0] ?? '?').toUpperCase()}
                   </div>
                 )}
@@ -484,20 +484,45 @@ function AttachmentItem({ att, isOwn, imageOnly }: { att: MessageAttachment; isO
       />
     </>
   ) : (
-    <div
+    <button
+      type="button"
+      onClick={async e => {
+        e.stopPropagation()
+        try {
+          const res = await fetch(att.url)
+          const blob = await res.blob()
+          const blobUrl = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = blobUrl
+          a.download = att.name
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000)
+        } catch {
+          window.open(att.url, '_blank')
+        }
+      }}
       className={clsx(
-        'flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer',
-        isOwn ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-surface-hover hover:bg-surface-hover/80 text-text-primary'
+        'flex items-center gap-3 px-3 py-2.5 w-full transition-colors text-left',
+        isOwn ? 'hover:bg-white/10' : 'hover:bg-surface-hover'
       )}
     >
-      <Paperclip size={12} className="shrink-0" />
-      <span className="truncate max-w-[150px]">{att.name}</span>
-      {att.size && (
-        <span className={clsx('shrink-0', isOwn ? 'text-white/60' : 'text-text-muted')}>
-          {formatFileSize(att.size)}
-        </span>
-      )}
-    </div>
+      <div className={clsx(
+        'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+        isOwn ? 'bg-white/20' : 'bg-violet-500/20'
+      )}>
+        <FileText size={20} className={isOwn ? 'text-white' : 'text-violet-500'} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={clsx('text-sm font-medium truncate leading-tight', isOwn ? 'text-white' : 'text-text-primary')}>
+          {att.name}
+        </p>
+        <p className={clsx('text-xs mt-0.5 leading-none', isOwn ? 'text-white/60' : 'text-text-muted')}>
+          {att.size ? formatFileSize(att.size) : 'File'}
+        </p>
+      </div>
+    </button>
   )
 }
 
@@ -506,7 +531,10 @@ interface MessageBubbleProps {
   isOwn: boolean
   senderColor: string
   senderInitial: string
+  senderName: string
+  senderPhotoURL?: string
   showAvatar: boolean
+  isGroup: boolean
   partnerUid: string | null
   currentUid: string
   convMemberIds: string[]
@@ -520,7 +548,7 @@ interface MessageBubbleProps {
   onReact: (id: string, emoji: string) => void
 }
 
-function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, partnerUid, currentUid, convMemberIds, members, selectMode, selected, highlighted, onContextMenu, onToggleSelect, onDelete, onReact }: MessageBubbleProps) {
+function MessageBubble({ msg, isOwn, senderColor, senderInitial, senderName, senderPhotoURL, showAvatar, isGroup, partnerUid, currentUid, convMemberIds, members, selectMode, selected, highlighted, onContextMenu, onToggleSelect, onDelete, onReact }: MessageBubbleProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [showActions, setShowActions] = useState(false)
 
@@ -548,9 +576,11 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
       {/* Avatar placeholder slot */}
       <div className="w-7 shrink-0">
         {!isOwn && showAvatar && (
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-            style={{ backgroundColor: senderColor }}>
-            {senderInitial}
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
+            style={{ backgroundColor: senderPhotoURL ? 'transparent' : senderColor, lineHeight: 1 }}>
+            {senderPhotoURL
+              ? <img src={senderPhotoURL} alt="" className="w-full h-full object-cover" />
+              : senderInitial}
           </div>
         )}
       </div>
@@ -577,9 +607,10 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
           {/* Bubble */}
           {(() => {
             const hasImage = !!(msg.attachments?.some(a => a.type === 'image'))
+            const hasAttachment = !!(msg.attachments && msg.attachments.length > 0)
             const imageOnly = !msg.text && !msg.replyTo && hasImage && msg.attachments?.length === 1
-            // When any image is present, bubble has no padding — image is edge-to-edge
-            const noBubblePad = imageOnly || hasImage
+            // No outer bubble padding whenever there are attachments — each attachment handles its own layout
+            const noBubblePad = hasAttachment
             return (
               <div
                 className={clsx(
@@ -590,10 +621,18 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
                     : 'bg-bg-secondary border border-border text-text-primary rounded-bl-sm'
                 )}
               >
+                {/* Group sender name */}
+                {isGroup && !isOwn && showAvatar && (
+                  <div className={clsx('leading-none font-semibold text-xs', noBubblePad ? 'px-3 pt-2 pb-1' : 'mb-1')}
+                    style={{ color: senderColor }}>
+                    {senderName}
+                  </div>
+                )}
+
                 {/* Reply preview */}
                 {msg.replyTo && (
                   <div className={clsx('mb-1.5 rounded-lg px-2 py-1 border-l-2 text-xs opacity-75',
-                    hasImage ? 'mx-3 mt-2' : '',
+                    hasAttachment ? 'mx-3 mt-2' : '',
                     isOwn ? 'bg-white/10 border-white/40' : 'bg-surface-hover border-violet-400')}>
                     <p className={clsx('font-medium', isOwn ? 'text-white' : 'text-violet-400')}>{msg.replyTo.senderName}</p>
                     <p className="truncate">{msg.replyTo.text}</p>
@@ -601,16 +640,18 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
                 )}
 
                 {/* Attachments */}
-                {msg.attachments && msg.attachments.length > 0 && (
-                  <div className={clsx(imageOnly ? '' : !hasImage ? 'mb-1 space-y-1' : '')}>
-                    {msg.attachments.map((att, i) => (
+                {hasAttachment && (
+                  <div className={clsx(msg.attachments!.length > 1 && !hasImage ? 'divide-y divide-white/10' : '')}>
+                    {msg.attachments!.map((att, i) => (
                       <AttachmentItem key={i} att={att} isOwn={isOwn} imageOnly={imageOnly} />
                     ))}
                   </div>
                 )}
 
-                {/* Caption text — always padded when image is present */}
-                {msg.text && <span className={hasImage ? 'px-2.5 py-1 block' : ''}>{msg.text}</span>}
+                {/* Text — gets its own padding when there are attachments above */}
+                {msg.text && (
+                  <span className={hasAttachment ? 'px-3 py-2 block' : ''}>{msg.text}</span>
+                )}
               </div>
             )
           })()}
@@ -640,7 +681,7 @@ function MessageBubble({ msg, isOwn, senderColor, senderInitial, showAvatar, par
                         <img key={uid} src={m.photoURL} alt="" className="w-3.5 h-3.5 rounded-full object-cover ring-1 ring-bg-secondary" />
                       ) : (
                         <div key={uid} className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-bg-secondary shrink-0"
-                          style={{ backgroundColor: m?.color ?? '#7c3aed' }}>
+                          style={{ backgroundColor: m?.color ?? '#7c3aed', lineHeight: 1 }}>
                           {(m?.displayName?.[0] ?? '?').toUpperCase()}
                         </div>
                       )
@@ -762,7 +803,7 @@ function NewGroupModal({ members, currentUid, onClose, onCreate }: NewGroupModal
                   />
                   <div
                     className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                    style={{ backgroundColor: m.color }}
+                    style={{ backgroundColor: m.color, lineHeight: 1 }}
                   >
                     {(m.displayName?.[0] ?? '?').toUpperCase()}
                   </div>
@@ -797,13 +838,14 @@ interface ConvItemProps {
   conv: Conversation
   isActive: boolean
   members: Record<string, { uid: string; displayName: string; color: string; photoURL?: string }>
+  partner: { uid: string; displayName: string; color: string; photoURL?: string } | null
   currentUid: string
   unreadCount: number
   onClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }
 
-function ConvItem({ conv, isActive, members, currentUid, unreadCount, onClick, onContextMenu }: ConvItemProps) {
+function ConvItem({ conv, isActive, members, partner, currentUid, unreadCount, onClick, onContextMenu }: ConvItemProps) {
   const isPinned = conv.pinnedBy?.includes(currentUid)
   const isOwnLastMsg = conv.lastMessageSenderId === currentUid
   const otherMembers = conv.memberIds.filter(id => id !== currentUid)
@@ -818,10 +860,10 @@ function ConvItem({ conv, isActive, members, currentUid, unreadCount, onClick, o
 
   if (conv.type === 'dm') {
     const partnerUid = conv.memberIds.find(id => id !== currentUid)
-    const partnerProfile = partnerUid ? members[partnerUid] : null
+    const partnerProfile = (partnerUid ? members[partnerUid] : null) ?? (partner?.uid === partnerUid ? partner : null)
     const color = partnerProfile?.color ?? '#7c3aed'
     const initial = (partnerProfile?.displayName?.[0] ?? '?').toUpperCase()
-    const name = partnerProfile?.displayName ?? 'Unknown'
+    const name = partnerProfile?.displayName ?? partner?.displayName ?? 'Unknown'
 
     return (
       <button onClick={onClick} onContextMenu={e => { e.preventDefault(); onContextMenu(e) }}
@@ -832,7 +874,7 @@ function ConvItem({ conv, isActive, members, currentUid, unreadCount, onClick, o
           {partnerProfile && (partnerProfile as any).photoURL ? (
             <img src={(partnerProfile as any).photoURL} alt="" className="w-9 h-9 rounded-full object-cover" />
           ) : (
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: color }}>{initial}</div>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: color, lineHeight: 1 }}>{initial}</div>
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -848,7 +890,7 @@ function ConvItem({ conv, isActive, members, currentUid, unreadCount, onClick, o
             <div className="flex items-center gap-1 shrink-0">
               <ReadIndicator />
               {unreadCount > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-violet-500 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-violet-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -987,7 +1029,7 @@ function SharedMediaSections({ messages, expandedSection, setExpandedSection }: 
             <span className="text-sm text-text-primary">Photos</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full">
+            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full leading-none inline-flex items-center">
               {imageAttachments.length}
             </span>
             <ChevronLeft size={14} className={clsx('text-text-muted transition-transform', expandedSection === 'photos' ? '-rotate-90' : 'rotate-180')} />
@@ -1032,7 +1074,7 @@ function SharedMediaSections({ messages, expandedSection, setExpandedSection }: 
             <span className="text-sm text-text-primary">Videos</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full">
+            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full leading-none inline-flex items-center">
               {videoAttachments.length}
             </span>
             <ChevronLeft size={14} className={clsx('text-text-muted transition-transform', expandedSection === 'videos' ? '-rotate-90' : 'rotate-180')} />
@@ -1078,7 +1120,7 @@ function SharedMediaSections({ messages, expandedSection, setExpandedSection }: 
             <span className="text-sm text-text-primary">Files</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full">
+            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full leading-none inline-flex items-center">
               {fileAttachments.length}
             </span>
             <ChevronLeft size={14} className={clsx('text-text-muted transition-transform', expandedSection === 'files' ? '-rotate-90' : 'rotate-180')} />
@@ -1133,7 +1175,7 @@ function SharedMediaSections({ messages, expandedSection, setExpandedSection }: 
             <span className="text-sm text-text-primary">Shared Links</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full">
+            <span className="text-xs text-text-muted bg-bg-primary border border-border px-2 py-0.5 rounded-full leading-none inline-flex items-center">
               {linkMessages.length}
             </span>
             <ChevronLeft size={14} className={clsx('text-text-muted transition-transform', expandedSection === 'links' ? '-rotate-90' : 'rotate-180')} />
@@ -1184,6 +1226,7 @@ interface GroupInfoPanelProps {
   onLeave: () => void
   onRequestLeave: () => void
   onExport: () => void
+  onClearHistory: (forBoth: boolean) => void
   onUpdateConversation: (id: string, data: Partial<Conversation>) => Promise<void>
   spaceId: string | null
 }
@@ -1198,6 +1241,7 @@ function GroupInfoPanel({
   onMuteToggle,
   onRequestLeave,
   onExport,
+  onClearHistory,
   onUpdateConversation,
   spaceId,
 }: GroupInfoPanelProps) {
@@ -1207,30 +1251,24 @@ function GroupInfoPanel({
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(conv.name ?? '')
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
   const groupPhotoInputRef = useRef<HTMLInputElement>(null)
 
   const handleGroupPhotoUpload = (file: File) => {
     setUploadingGroupPhoto(true)
     setGroupPhotoError('')
-    console.log('[GroupPhoto] reading file:', file.name, file.size)
-
     const reader = new FileReader()
     reader.onload = async (e) => {
-      console.log('[GroupPhoto] FileReader loaded')
       try {
         const dataUrl = e.target?.result as string
-        console.log('[GroupPhoto] dataUrl length:', dataUrl?.length)
         await onUpdateConversation(conv.id, { photoURL: dataUrl })
-        console.log('[GroupPhoto] updateConversation done')
       } catch (err: any) {
-        console.error('[GroupPhoto] updateConversation failed:', err)
         setGroupPhotoError(err?.message ?? 'Upload failed')
       } finally {
         setUploadingGroupPhoto(false)
       }
     }
-    reader.onerror = (err) => {
-      console.error('[GroupPhoto] FileReader error:', err)
+    reader.onerror = () => {
       setGroupPhotoError('Failed to read file')
       setUploadingGroupPhoto(false)
     }
@@ -1409,6 +1447,30 @@ function GroupInfoPanel({
                 >
                   Export chat history
                 </button>
+                <div className="border-t border-border my-1" />
+                <button
+                  onClick={() => setClearOpen(v => !v)}
+                  className="w-full flex items-center px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                >
+                  <span className="flex-1 text-left">Clear history</span>
+                  <ChevronRight size={12} className={clsx('transition-transform', clearOpen && 'rotate-90')} />
+                </button>
+                {clearOpen && (
+                  <>
+                    <button
+                      onClick={() => { onClearHistory(false); setShowMoreMenu(false) }}
+                      className="w-full text-left pl-8 pr-4 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      Only for me
+                    </button>
+                    <button
+                      onClick={() => { onClearHistory(true); setShowMoreMenu(false) }}
+                      className="w-full text-left pl-8 pr-4 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      For both
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1450,7 +1512,7 @@ function GroupInfoPanel({
                     ) : (
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                        style={{ backgroundColor: color }}
+                        style={{ backgroundColor: color, lineHeight: 1 }}
                       >
                         {initial}
                       </div>
@@ -1487,6 +1549,7 @@ function DMProfilePanel({
   onClose,
   onMuteToggle,
   onExport,
+  onClearHistory,
 }: {
   profile: { uid: string; displayName: string; color: string; photoURL?: string; phone?: string; email?: string; bio?: string; lastSeen?: number }
   messages: Message[]
@@ -1494,9 +1557,11 @@ function DMProfilePanel({
   onClose: () => void
   onMuteToggle: () => void
   onExport: () => void
+  onClearHistory: (forBoth: boolean) => void
 }) {
   const [expandedSection, setExpandedSection] = useState<MediaSection | null>(null)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
   const [lightbox, setLightbox] = useState(false)
 
   return (
@@ -1595,8 +1660,8 @@ function DMProfilePanel({
           </button>
           {showMoreMenu && (
             <div
-              className="absolute right-0 top-full mt-1 w-44 bg-bg-secondary border border-border rounded-xl shadow-xl z-20 py-1 overflow-hidden"
-              onMouseLeave={() => setShowMoreMenu(false)}
+              className="absolute right-0 top-full mt-1 w-48 bg-bg-secondary border border-border rounded-xl shadow-xl z-20 py-1 overflow-hidden"
+              onMouseLeave={() => { setShowMoreMenu(false); setClearOpen(false) }}
             >
               <button
                 onClick={() => { setShowMoreMenu(false); onExport() }}
@@ -1604,6 +1669,20 @@ function DMProfilePanel({
               >
                 Export chat history
               </button>
+              <div className="border-t border-border my-1" />
+              <button
+                onClick={() => setClearOpen(v => !v)}
+                className="w-full flex items-center px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+              >
+                <span className="flex-1 text-left">Clear history</span>
+                <ChevronRight size={12} className={clsx('transition-transform', clearOpen && 'rotate-90')} />
+              </button>
+              {clearOpen && (
+                <>
+                  <button onClick={() => { onClearHistory(false); setShowMoreMenu(false) }} className="w-full text-left pl-8 pr-4 py-1.5 text-xs text-red-400 hover:bg-red-500/10">Only for me</button>
+                  <button onClick={() => { onClearHistory(true); setShowMoreMenu(false) }} className="w-full text-left pl-8 pr-4 py-1.5 text-xs text-red-400 hover:bg-red-500/10">For both</button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -2039,7 +2118,7 @@ export default function MessengerPage() {
                         {(m as any).photoURL ? (
                           <img src={(m as any).photoURL} alt="" className="w-9 h-9 rounded-full object-cover" />
                         ) : (
-                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: m.color }}>
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: m.color, lineHeight: 1 }}>
                             {(m.displayName?.[0] ?? '?').toUpperCase()}
                           </div>
                         )}
@@ -2059,6 +2138,7 @@ export default function MessengerPage() {
                 conv={conv}
                 isActive={conv.id === activeConversationId}
                 members={members}
+                partner={partner}
                 currentUid={uid}
                 unreadCount={unreadCounts[conv.id] ?? 0}
                 onClick={() => {
@@ -2116,7 +2196,7 @@ export default function MessengerPage() {
                   >
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 overflow-hidden"
-                      style={{ backgroundColor: activeHeader?.photoURL ? 'transparent' : (activeHeader?.color ?? '#7c3aed') }}
+                      style={{ backgroundColor: activeHeader?.photoURL ? 'transparent' : (activeHeader?.color ?? '#7c3aed'), lineHeight: 1 }}
                     >
                       {activeHeader?.photoURL
                         ? <img src={activeHeader.photoURL} alt="" className="w-full h-full object-cover" />
@@ -2134,25 +2214,28 @@ export default function MessengerPage() {
 
               {/* Pinned message banner */}
               {(() => {
+                // oldest first → top bar = earliest in chat
                 const pinned = visibleMessages
                   .filter(m => m.pinnedBy?.includes(uid))
-                  .sort((a, b) => b.createdAt - a.createdAt)
+                  .sort((a, b) => a.createdAt - b.createdAt)
                 if (pinned.length === 0) return null
                 const safeIdx = pinnedIdx % pinned.length
-                const current = pinned[safeIdx]
+                // start at the newest (bottom bar), cycle upward toward oldest
+                const activeBarIdx = pinned.length - 1 - safeIdx
+                const current = pinned[activeBarIdx]
                 const preview = current.text
                   ? current.text.slice(0, 80) + (current.text.length > 80 ? '…' : '')
                   : current.attachments?.[0]?.type === 'image' ? 'Photo' : 'Attachment'
                 return (
                   <>
                   <div className="flex items-center border-b border-border bg-bg-secondary shrink-0">
-                    {/* Telegram-style vertical segment indicators */}
+                    {/* Vertical segment indicators: top = oldest, bottom = newest */}
                     <div className="flex flex-col gap-px py-2 pl-3 pr-2 shrink-0" style={{ height: 40 }}>
                       {pinned.map((_, i) => (
                         <div
                           key={i}
                           className="flex-1 rounded-full transition-colors"
-                          style={{ width: 2, minHeight: 2, backgroundColor: i === safeIdx ? '#7c3aed' : 'var(--color-border)' }}
+                          style={{ width: 2, minHeight: 2, backgroundColor: i === activeBarIdx ? '#7c3aed' : 'var(--color-border)' }}
                         />
                       ))}
                     </div>
@@ -2167,7 +2250,7 @@ export default function MessengerPage() {
                         setPinnedIdx(i => (i + 1) % pinned.length)
                       }}
                     >
-                      <p className="text-[10px] font-semibold text-violet-400 leading-none mb-0.5">Pinned message</p>
+                      <p className="text-[10px] font-semibold text-violet-400 leading-none mb-0.5">Pinned message{pinned.length > 1 ? ` #${safeIdx + 1}` : ''}</p>
                       <p className="text-xs text-text-secondary truncate">{preview}</p>
                     </div>
                     {/* Open pinned list button */}
@@ -2198,14 +2281,15 @@ export default function MessengerPage() {
                               el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                               setHighlightedMsgId(m.id)
                               setTimeout(() => setHighlightedMsgId(null), 1000)
-                              setPinnedIdx(i)
+                              // pinned is oldest-first; safeIdx counts from the newest end
+                              setPinnedIdx(pinned.length - 1 - i)
                             }}
                           >
                             <div className="flex flex-col gap-px pt-1 shrink-0" style={{ width: 2 }}>
                               <div className="rounded-full flex-1" style={{ width: 2, height: 32, backgroundColor: '#7c3aed' }} />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-[10px] font-semibold text-violet-400 leading-none mb-0.5">Pinned message #{pinned.length - i}</p>
+                              <p className="text-[10px] font-semibold text-violet-400 leading-none mb-0.5">Pinned message #{i + 1}</p>
                               <p className="text-xs text-text-secondary line-clamp-2">{prev}</p>
                             </div>
                           </div>
@@ -2247,6 +2331,8 @@ export default function MessengerPage() {
                     const senderProfile = members[msg.senderId]
                     const senderColor = senderProfile?.color ?? '#7c3aed'
                     const senderInitial = (senderProfile?.displayName?.[0] ?? '?').toUpperCase()
+                    const senderName = senderProfile?.displayName ?? 'Unknown'
+                    const senderPhotoURL = senderProfile?.photoURL as string | undefined
                     return (
                       <MessageBubble
                         key={msg.id}
@@ -2254,7 +2340,10 @@ export default function MessengerPage() {
                         isOwn={isOwn}
                         senderColor={senderColor}
                         senderInitial={senderInitial}
+                        senderName={senderName}
+                        senderPhotoURL={senderPhotoURL}
                         showAvatar={showAvatar}
+                        isGroup={activeConversation?.type === 'group'}
                         partnerUid={activeHeader?.partnerUid ?? null}
                         currentUid={uid}
                         convMemberIds={activeConversation?.memberIds ?? []}
@@ -2433,6 +2522,7 @@ export default function MessengerPage() {
               }}
               onRequestLeave={() => setShowLeaveConfirm(true)}
               onExport={() => setExportConv(activeConversation)}
+              onClearHistory={(forBoth) => clearHistory(activeConversation.id, forBoth)}
               onUpdateConversation={updateConversation}
               spaceId={spaceId}
             />
@@ -2456,6 +2546,7 @@ export default function MessengerPage() {
               onClose={() => setShowDMProfile(false)}
               onMuteToggle={() => setMuted(v => !v)}
               onExport={() => setExportConv(activeConversation)}
+              onClearHistory={(forBoth) => clearHistory(activeConversation.id, forBoth)}
             />
           )}
 
